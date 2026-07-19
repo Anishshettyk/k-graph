@@ -72,3 +72,10 @@ export function kindBg(kind: string) {
     const color = kindColor(kind)
     return hexToRgba(color, 0.08)
 }
+
+// Re-export custom SVG icons from the .tsx file so consumers can import from kinds.
+export type { SvgIconProps } from './kindIcons'
+export {
+    ServiceIcon, IngressIcon, PVCIcon, PVIcon,
+    NetworkPolicyIcon, ConfigMapIcon, SecretIcon,
+} from './kindIcons'
