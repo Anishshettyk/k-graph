@@ -10,7 +10,7 @@ import {
 } from '../lib/kinds'
 import type { NodeInfo } from '../types/api'
 
-type ResourceNodeData = NodeInfo & { selected?: boolean }
+type ResourceNodeData = NodeInfo & { selected?: boolean; dimmed?: boolean; heatmapColor?: string }
 
 const H: React.CSSProperties = { opacity: 0, width: 6, height: 6, background: 'transparent', border: 'none' }
 
@@ -112,13 +112,22 @@ function StatusBadge({ text, ok }: { text: string; ok: boolean }) {
 }
 
 export const ResourceNode = memo(({ data, selected }: NodeProps & { data: ResourceNodeData }) => {
-    const color = kindColor(data.kind)
-    const _bg = kindBg(data.kind)
+    const color = data.heatmapColor ?? kindColor(data.kind)
+    const bg = kindBg(data.kind)
     const Icon = kindIcon(data.kind)
+    const dimmed = data.dimmed && !selected
+
+    // Wrap everything in a dimming container so hover-highlighting works without
+    // re-running dagre. Opacity transition keeps it smooth.
+    const wrapper = (children: React.ReactNode) => (
+        <div style={{ opacity: dimmed ? 0.18 : 1, transition: 'opacity 0.15s ease', pointerEvents: dimmed ? 'none' : undefined }}>
+            {children}
+        </div>
+    )
 
     // ── Pod — circle ─────────────────────────────────────────────────────────
     if (data.kind === 'Pod') {
-        return (
+        return wrapper(
             <div
                 className={clsx(
                     'relative flex flex-col items-center justify-center text-center',
@@ -127,7 +136,7 @@ export const ResourceNode = memo(({ data, selected }: NodeProps & { data: Resour
                     selected ? 'scale-[1.04]' : 'hover:scale-[1.02]'
                 )}
                 style={{
-                    background: selected ? `linear-gradient(135deg, ${_bg}, rgba(56,189,248,0.06))` : _bg,
+                    background: selected ? `linear-gradient(135deg, ${bg}, rgba(56,189,248,0.06))` : bg,
                     border: `2px solid ${selected ? '#38bdf8' : color + '55'}`,
                     boxShadow: selected
                         ? '0 0 20px rgba(56,189,248,0.4)'
@@ -147,7 +156,7 @@ export const ResourceNode = memo(({ data, selected }: NodeProps & { data: Resour
 
     // ── Service — hub card ────────────────────────────────────────────────────
     if (data.kind === 'Service') {
-        return (
+        return wrapper(
             <SpecialCard data={data} selected={selected} CustomIcon={ServiceIcon} kindLabel="Service"
                 badge={data.fields?.type && <StatusBadge text={data.fields.type} ok />}
             />
@@ -227,7 +236,7 @@ export const ResourceNode = memo(({ data, selected }: NodeProps & { data: Resour
                 selected ? 'scale-[1.04]' : 'hover:scale-[1.02]'
             )}
             style={{
-                background: selected ? `linear-gradient(135deg, ${_bg}, rgba(56,189,248,0.06))` : _bg,
+                background: selected ? `linear-gradient(135deg, ${bg}, rgba(56,189,248,0.06))` : bg,
                 border: `2px solid ${selected ? '#38bdf8' : color + '55'}`,
                 boxShadow: selected ? '0 0 20px rgba(56,189,248,0.4)' : undefined,
             }}

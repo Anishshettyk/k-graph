@@ -11,10 +11,11 @@ interface Props {
     node: NodeInfo
     context: string
     namespace: string
+    defaultTab?: 'info' | 'yaml' | 'why' | 'events' | 'logs'
 }
 
-export function DetailsPanel({ node, context, namespace }: Props) {
-    const [tab, setTab] = useState<'info' | 'why' | 'events' | 'yaml' | 'logs'>('info')
+export function DetailsPanel({ node, context, namespace, defaultTab }: Props) {
+    const [tab, setTab] = useState<'info' | 'why' | 'events' | 'yaml' | 'logs'>(defaultTab ?? 'info')
 
     const whyQuery = useQuery({
         queryKey: ['why', context, namespace, `${node.kind}/${node.name}`],

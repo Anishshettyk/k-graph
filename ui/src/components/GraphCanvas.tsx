@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
     ReactFlow, Controls, MiniMap,
     useNodesState, useEdgesState, useReactFlow, ReactFlowProvider,
@@ -10,7 +10,6 @@ import '@xyflow/react/dist/style.css'
 import { ResourceNode } from './ResourceNode'
 import { kindColor } from '../lib/kinds'
 import type { GraphResponse, NodeInfo, EdgeInfo } from '../types/api'
-
 const nodeTypes = { resource: ResourceNode }
 
 const TOP_LEVEL_KINDS = new Set([
@@ -127,6 +126,35 @@ interface Props {
     selectedUID: string | null
     onSelect: (node: NodeInfo) => void
     filterKind: string
+    heatmapMode?: boolean
+    onContextMenu?: (x: number, y: number, node: NodeInfo) => void
+}
+
+// ─── Heatmap health colour per node ─────────────────────────────────────────
+function heatmapColor(node: NodeInfo, data: GraphResponse): string {
+    if (node.kind === 'Pod') return node.healthy ? '#22c55e' : '#f87171'
+    if (node.kind === 'Deployment' || node.kind === 'StatefulSet') {
+        const ready  = parseInt(node.fields?.readyReplicas ?? '-1')
+        const total  = parseInt(node.fields?.replicas ?? '0')
+        if (ready < 0 || total === 0) return '#94a3b8'
+        if (ready === total) return '#22c55e'
+        if (ready === 0)     return '#f87171'
+        return '#fbbf24'
+    }
+    if (node.kind === 'PersistentVolumeClaim') {
+        const phase = node.fields?.phase
+        if (phase === 'Bound')   return '#22c55e'
+        if (phase === 'Lost')    return '#f87171'
+        if (phase === 'Pending') return '#fbbf24'
+        return '#94a3b8'
+    }
+    if (node.kind === 'Service') {
+        const hasSelector = node.fields?.selector && node.fields.selector !== ''
+        const hasPods     = data.edges.some(e => e.from === node.uid && e.rel === 'selects')
+        if (hasSelector && !hasPods) return '#f87171'
+        return '#22c55e'
+    }
+    return '#94a3b8'
 }
 
 // Relationships where we show a label (these have semantic meaning beyond
@@ -167,10 +195,22 @@ function edgeColor(rel: string): string {
     }
 }
 
-function GraphCanvasInner({ data, selectedUID, onSelect, filterKind }: Props) {
+function GraphCanvasInner({ data, selectedUID, onSelect, filterKind, heatmapMode, onContextMenu }: Props) {
     const [nodes, setNodes, onNodesChange] = useNodesState<Node>([])
     const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([])
     const { fitView } = useReactFlow()
+    const [hoveredUID, setHoveredUID] = useState<string | null>(null)
+
+    // Build the set of neighbours for the currently hovered node so we can dim the rest.
+    const hoveredNeighbours = useMemo(() => {
+        if (!hoveredUID) return null
+        const nbrs = new Set([hoveredUID])
+        data.edges.forEach(e => {
+            if (e.from === hoveredUID) nbrs.add(e.to)
+            if (e.to   === hoveredUID) nbrs.add(e.from)
+        })
+        return nbrs
+    }, [hoveredUID, data.edges])
 
     const { flowNodes, flowEdges } = useMemo(() => {
         let visibleUIDs: Set<string>
@@ -207,7 +247,12 @@ function GraphCanvasInner({ data, selectedUID, onSelect, filterKind }: Props) {
                 id: n.uid,
                 type: 'resource',
                 position: { x: 0, y: 0 },
-                data: { ...n, selected: n.uid === selectedUID },
+                data: {
+                    ...n,
+                    selected:    n.uid === selectedUID,
+                    dimmed:      hoveredNeighbours ? !hoveredNeighbours.has(n.uid) : false,
+                    heatmapColor: heatmapMode ? heatmapColor(n, data) : undefined,
+                },
                 selected: n.uid === selectedUID,
             }))
 
@@ -227,7 +272,7 @@ function GraphCanvasInner({ data, selectedUID, onSelect, filterKind }: Props) {
         const rawEdges = [...directEdges, ...uniqueVirtual]
 
         return { flowNodes: rawNodes, flowEdges: rawEdges }
-    }, [data, filterKind, selectedUID])
+    }, [data, filterKind, selectedUID, hoveredNeighbours, heatmapMode])
 
     useEffect(() => {
         if (flowNodes.length === 0) {
@@ -300,16 +345,107 @@ function GraphCanvasInner({ data, selectedUID, onSelect, filterKind }: Props) {
         if (info) onSelect(info)
     }, [data.nodes, onSelect])
 
+    // Hover: imperatively dim unrelated edges without re-running dagre.
+    const handleNodeMouseEnter = useCallback((_: React.MouseEvent, node: Node) => {
+        setHoveredUID(node.id)
+        setEdges(es => es.map(e => {
+            const connected = e.source === node.id || e.target === node.id
+            return {
+                ...e,
+                style: {
+                    ...e.style,
+                    opacity: connected ? 1 : 0.12,
+                    stroke: connected ? (e.animated ? '#f97316' : '#38bdf8') : '#1e3254',
+                    strokeWidth: connected ? 2 : 1,
+                },
+                markerEnd: connected
+                    ? { type: 'arrowclosed' as const, color: e.animated ? '#f97316' : '#38bdf8', width: 14, height: 14 }
+                    : { type: 'arrowclosed' as const, color: '#1e3254', width: 10, height: 10 },
+            }
+        }))
+    }, [setHoveredUID, setEdges])
+
+    const handleNodeMouseLeave = useCallback(() => {
+        setHoveredUID(null)
+        // Reset edge styles to defaults
+        setEdges(es => es.map(e => ({
+            ...e,
+            style: { stroke: edgeColor(e.label as string ?? ''), strokeWidth: e.animated ? 1.5 : 1 },
+            markerEnd: { type: 'arrowclosed' as const, color: edgeColor(e.label as string ?? ''), width: 14, height: 14 },
+        })))
+    }, [setHoveredUID, setEdges])
+
+    // Right-click → context menu
+    const handleNodeContextMenu = useCallback((e: React.MouseEvent, node: Node) => {
+        e.preventDefault()
+        const info = data.nodes.find(n => n.uid === node.id)
+        if (info && onContextMenu) onContextMenu(e.clientX, e.clientY, info)
+        // Also select the node so the context menu actions have a target
+        if (info) onSelect(info)
+    }, [data.nodes, onContextMenu, onSelect])
+
+    // Keyboard navigation: j/k or ↑/↓ move between visible nodes when graph is focused.
+    const containerRef = useCallback((el: HTMLDivElement | null) => {
+        if (!el) return
+        const sortedUIDs = () =>
+            nodes
+                .slice()
+                .sort((a, b) => a.position.y !== b.position.y ? a.position.y - b.position.y : a.position.x - b.position.x)
+                .map(n => n.id)
+
+        const handler = (ev: KeyboardEvent) => {
+            // Don't hijack keys when the user is typing
+            const tag = (ev.target as HTMLElement)?.tagName
+            if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
+            if (!['ArrowDown', 'ArrowUp', 'ArrowRight', 'ArrowLeft', 'j', 'k'].includes(ev.key)) return
+
+            ev.preventDefault()
+            const uids = sortedUIDs()
+            if (uids.length === 0) return
+
+            const cur = selectedUID ? uids.indexOf(selectedUID) : -1
+
+            if (ev.key === 'ArrowDown' || ev.key === 'j') {
+                const next = uids[(cur + 1) % uids.length]
+                const info = data.nodes.find(n => n.uid === next)
+                if (info) onSelect(info)
+            } else if (ev.key === 'ArrowUp' || ev.key === 'k') {
+                const prev = uids[(cur - 1 + uids.length) % uids.length]
+                const info = data.nodes.find(n => n.uid === prev)
+                if (info) onSelect(info)
+            } else if (ev.key === 'ArrowRight' && selectedUID) {
+                // Move to the first forward neighbour
+                const neighbour = data.edges.find(e => e.from === selectedUID)
+                if (neighbour) {
+                    const info = data.nodes.find(n => n.uid === neighbour.to)
+                    if (info) onSelect(info)
+                }
+            } else if (ev.key === 'ArrowLeft' && selectedUID) {
+                // Move to the first backward neighbour
+                const neighbour = data.edges.find(e => e.to === selectedUID)
+                if (neighbour) {
+                    const info = data.nodes.find(n => n.uid === neighbour.from)
+                    if (info) onSelect(info)
+                }
+            }
+        }
+        el.addEventListener('keydown', handler)
+        return () => el.removeEventListener('keydown', handler)
+    }, [nodes, selectedUID, data.nodes, data.edges, onSelect])
+
     const visibleCount = nodes.length
 
     return (
-        <div className="w-full h-full relative">
+        <div ref={containerRef} className="w-full h-full relative" tabIndex={0} style={{ outline: 'none' }}>
             <ReactFlow
                 nodes={nodes}
                 edges={edges}
                 onNodesChange={onNodesChange}
                 onEdgesChange={onEdgesChange}
                 onNodeClick={handleNodeClick}
+                onNodeMouseEnter={handleNodeMouseEnter}
+                onNodeMouseLeave={handleNodeMouseLeave}
+                onNodeContextMenu={handleNodeContextMenu}
                 nodeTypes={nodeTypes}
                 fitView
                 fitViewOptions={{ padding: 0.12, maxZoom: 1.2 }}
