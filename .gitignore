@@ -1,0 +1,21 @@
+# KGraph binary (built output)
+kgraph
+
+# Go build cache
+*.test
+*.out
+
+# Node / Vite
+ui/node_modules/
+ui/dist/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/settings.json
+
+# Snapshots stored locally
+.kgraph/

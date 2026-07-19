@@ -1,0 +1,216 @@
+// Mirrors the Go API response structs exactly.
+
+export interface ContextsResponse {
+    current: string
+    contexts: string[]
+}
+
+export interface NodeInfo {
+    uid: string
+    kind: string
+    namespace: string
+    name: string
+    healthy: boolean
+    reason?: string
+    fields?: Record<string, string>
+    labels?: Record<string, string>
+}
+
+export interface EdgeInfo {
+    from: string
+    to: string
+    rel: string
+}
+
+export interface GraphResponse {
+    context: string
+    namespace: string
+    nodes: NodeInfo[]
+    edges: EdgeInfo[]
+}
+
+export interface TreeNode {
+    node: NodeInfo
+    rel?: string
+    cycle?: boolean
+    children: TreeNode[]
+}
+
+export interface TreeResponse {
+    context: string
+    root: TreeNode
+}
+
+export interface Finding {
+    title: string
+    detail: string
+}
+
+export interface DiagEvent {
+    reason: string
+    message: string
+}
+
+export interface DiagLog {
+    container: string
+    excerpt: string
+}
+
+export interface PodDiagnosis {
+    pod: NodeInfo
+    status: string
+    summary?: string
+    findings?: Finding[]
+    events?: DiagEvent[]
+    logs?: DiagLog[]
+}
+
+export interface WhyResponse {
+    context: string
+    node: NodeInfo
+    tree: TreeNode
+    diagnoses: PodDiagnosis[]
+}
+
+export interface FindingInfo {
+    severity: 'blocking' | 'warning'
+    category: string
+    kind: string
+    namespace: string
+    name: string
+    issue: string
+    detail: string
+    fix: string
+}
+
+export interface DoctorResponse {
+    context: string
+    findings: FindingInfo[]
+}
+
+export interface OrphanInfo {
+    node: NodeInfo
+    reason: string
+}
+
+export interface OrphanResponse {
+    context: string
+    orphans: OrphanInfo[]
+}
+
+export interface EventInfo {
+    age: string
+    type: string
+    reason: string
+    object: string
+    message: string
+}
+
+export interface EventsResponse {
+    context: string
+    events: EventInfo[]
+}
+
+export interface GrantPath {
+    bindingKind: string
+    bindingName: string
+    bindingNs: string
+    roleKind: string
+    roleName: string
+    ruleIndex: number
+}
+
+export interface RBACCheckInfo {
+    bindingKind: string
+    bindingName: string
+    bindingNs: string
+    roleKind: string
+    roleName: string
+    subjectMatch: boolean
+    grants: boolean
+}
+
+export interface RBACResponse {
+    context: string
+    serviceAccount: string
+    namespace: string
+    verb: string
+    resource: string
+    apiGroup: string
+    verdict: 'GRANTED' | 'DENIED'
+    paths?: GrantPath[]
+    checks: RBACCheckInfo[]
+}
+
+export interface PodHop {
+    name: string
+    namespace: string
+    healthy: boolean
+    reason?: string
+}
+
+export interface NetworkHop {
+    kind: string
+    namespace: string
+    name: string
+    healthy: boolean
+    ready: number
+    total: number
+    selector?: string
+    pods?: PodHop[]
+}
+
+export interface NetworkResponse {
+    context: string
+    resource: string
+    hops: NetworkHop[]
+}
+
+export interface ReachResult {
+    dstPod: string
+    verdict: string
+    egressOpen: boolean
+    ingressOpen: boolean
+    suggestion?: string
+}
+
+export interface CanReachResponse {
+    context: string
+    source: string
+    dest: string
+    port: number
+    protocol: string
+    results: ReachResult[]
+}
+
+// ─── YAML / Manifest ─────────────────────────────────────────────────────────
+
+export interface YAMLResponse {
+    context: string
+    resource: string
+    yaml: string
+}
+
+// ─── Logs ────────────────────────────────────────────────────────────────────
+
+export type LogLevel = 'FATAL' | 'ERROR' | 'WARN' | 'INFO' | 'DEBUG' | 'TRACE' | 'UNKNOWN'
+
+export interface LogEntry {
+    lineNum: number
+    raw: string
+    level: LogLevel
+    timestamp?: string
+    message?: string
+}
+
+export interface PodLogResult {
+    pod: string
+    container: string
+    entries: LogEntry[]
+    error?: string
+}
+
+export interface LogsResponse {
+    context: string
+    pods: PodLogResult[]
+}

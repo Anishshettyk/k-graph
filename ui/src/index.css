@@ -1,0 +1,148 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+    color-scheme: dark;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    background: #04060e;
+    color: #e2e8f0;
+    font-family: 'Inter', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+    width: 5px;
+    height: 5px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #1e3254;
+    border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #38bdf8;
+}
+
+/* React Flow overrides */
+.react-flow__background {
+    background-color: #04060e !important;
+}
+
+.react-flow__edge-path {
+    stroke: #1e3254;
+    stroke-width: 1;
+}
+
+.react-flow__edge.selected .react-flow__edge-path,
+.react-flow__edge:hover .react-flow__edge-path {
+    stroke: #38bdf8;
+    stroke-width: 2;
+}
+
+/* Edge label text — no dashed box, no animation */
+.react-flow__edge-text {
+    font-size: 9px !important;
+    fill: #475569 !important;
+}
+
+/* Edge label background — plain dark fill, no stroke/border */
+.react-flow__edge-textbg {
+    fill: #080d1a !important;
+    stroke: none !important;
+    rx: 3;
+    ry: 3;
+}
+
+.react-flow__controls {
+    background: #0c1326;
+    border: 1px solid #162440;
+    border-radius: 8px;
+    box-shadow: none;
+}
+
+.react-flow__controls-button {
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid #162440;
+    color: #64748b;
+    transition: color 0.2s;
+}
+
+.react-flow__controls-button:hover {
+    background: #101b33;
+    color: #38bdf8;
+}
+
+.react-flow__minimap {
+    background: #080d1a;
+    border: 1px solid #162440;
+    border-radius: 8px;
+}
+
+.react-flow__minimap-mask {
+    fill: rgba(56, 189, 248, 0.05);
+}
+
+/* KGraph Custom Edge Styles */
+.edge-owns {
+    stroke: #334155;
+    stroke-width: 1;
+}
+
+.edge-routes-to {
+    stroke: #f97316;
+    stroke-width: 2;
+    stroke-dasharray: 6 4;
+    animation: dash-flow 1s linear infinite;
+}
+
+.edge-selects {
+    stroke: #d946ef;
+    stroke-width: 2;
+    stroke-dasharray: 6 4;
+    animation: dash-flow 1s linear infinite;
+}
+
+.edge-mounts {
+    stroke: #60a5fa;
+    stroke-width: 1.5;
+}
+
+.edge-policy-selects {
+    stroke: #fb923c;
+    stroke-width: 1.5;
+}
+
+@keyframes dash-flow {
+    from {
+        stroke-dashoffset: 10;
+    }
+
+    to {
+        stroke-dashoffset: 0;
+    }
+}
+
+/* Background hex pattern */
+.bg-hex {
+    background-image: url("data:image/svg+xml,%3Csvg width='24' height='42' viewBox='0 0 24 42' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M12 0l12 7v14l-12 7-12-7V7zM0 21l12 7v14l-12 7-12-7v-14z' fill='none' stroke='%231e3254' stroke-width='1' stroke-opacity='0.2'/%3E%3C/svg%3E");
+    background-size: 24px 42px;
+}
