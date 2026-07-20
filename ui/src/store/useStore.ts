@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import type { NodeInfo } from '../types/api'
 
-type Page = 'explorer' | 'doctor' | 'orphan' | 'rbac' | 'events'
+type Page = 'explorer' | 'doctor' | 'orphan' | 'rbac' | 'events' | 'metrics'
 
 interface Store {
     context: string

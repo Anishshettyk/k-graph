@@ -134,23 +134,23 @@ interface Props {
 function heatmapColor(node: NodeInfo, data: GraphResponse): string {
     if (node.kind === 'Pod') return node.healthy ? '#22c55e' : '#f87171'
     if (node.kind === 'Deployment' || node.kind === 'StatefulSet') {
-        const ready  = parseInt(node.fields?.readyReplicas ?? '-1')
-        const total  = parseInt(node.fields?.replicas ?? '0')
+        const ready = parseInt(node.fields?.readyReplicas ?? '-1')
+        const total = parseInt(node.fields?.replicas ?? '0')
         if (ready < 0 || total === 0) return '#94a3b8'
         if (ready === total) return '#22c55e'
-        if (ready === 0)     return '#f87171'
+        if (ready === 0) return '#f87171'
         return '#fbbf24'
     }
     if (node.kind === 'PersistentVolumeClaim') {
         const phase = node.fields?.phase
-        if (phase === 'Bound')   return '#22c55e'
-        if (phase === 'Lost')    return '#f87171'
+        if (phase === 'Bound') return '#22c55e'
+        if (phase === 'Lost') return '#f87171'
         if (phase === 'Pending') return '#fbbf24'
         return '#94a3b8'
     }
     if (node.kind === 'Service') {
         const hasSelector = node.fields?.selector && node.fields.selector !== ''
-        const hasPods     = data.edges.some(e => e.from === node.uid && e.rel === 'selects')
+        const hasPods = data.edges.some(e => e.from === node.uid && e.rel === 'selects')
         if (hasSelector && !hasPods) return '#f87171'
         return '#22c55e'
     }
@@ -207,7 +207,7 @@ function GraphCanvasInner({ data, selectedUID, onSelect, filterKind, heatmapMode
         const nbrs = new Set([hoveredUID])
         data.edges.forEach(e => {
             if (e.from === hoveredUID) nbrs.add(e.to)
-            if (e.to   === hoveredUID) nbrs.add(e.from)
+            if (e.to === hoveredUID) nbrs.add(e.from)
         })
         return nbrs
     }, [hoveredUID, data.edges])
@@ -249,8 +249,8 @@ function GraphCanvasInner({ data, selectedUID, onSelect, filterKind, heatmapMode
                 position: { x: 0, y: 0 },
                 data: {
                     ...n,
-                    selected:    n.uid === selectedUID,
-                    dimmed:      hoveredNeighbours ? !hoveredNeighbours.has(n.uid) : false,
+                    selected: n.uid === selectedUID,
+                    dimmed: hoveredNeighbours ? !hoveredNeighbours.has(n.uid) : false,
                     heatmapColor: heatmapMode ? heatmapColor(n, data) : undefined,
                 },
                 selected: n.uid === selectedUID,

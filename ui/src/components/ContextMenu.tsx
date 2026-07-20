@@ -39,18 +39,18 @@ export function ContextMenu({ x, y, node, onClose, onOpenTab }: Props) {
 
     const actions: Action[] = [
         { label: 'Why is this failing?', icon: '⚕', onClick: () => { onOpenTab('why'); onClose() } },
-        { label: 'View logs',            icon: '◈', onClick: () => { onOpenTab('logs'); onClose() } },
-        { label: 'View YAML manifest',   icon: '▦', onClick: () => { onOpenTab('yaml'); onClose() } },
-        { label: 'View events',          icon: '◷', onClick: () => { onOpenTab('events'); onClose() } },
-        { label: `Copy name`,            icon: '⎘', onClick: () => copyText(node.name) },
+        { label: 'View logs', icon: '◈', onClick: () => { onOpenTab('logs'); onClose() } },
+        { label: 'View YAML manifest', icon: '▦', onClick: () => { onOpenTab('yaml'); onClose() } },
+        { label: 'View events', icon: '◷', onClick: () => { onOpenTab('events'); onClose() } },
+        { label: `Copy name`, icon: '⎘', onClick: () => copyText(node.name) },
         ...(node.namespace ? [{ label: 'Copy namespace/name', icon: '⎘', onClick: () => copyText(`${node.namespace}/${node.name}`) }] : []),
     ]
 
     // Keep menu inside viewport
     const menuW = 220
     const menuH = actions.length * 36 + 16
-    const left  = Math.min(x, window.innerWidth  - menuW - 8)
-    const top   = Math.min(y, window.innerHeight - menuH - 8)
+    const left = Math.min(x, window.innerWidth - menuW - 8)
+    const top = Math.min(y, window.innerHeight - menuH - 8)
 
     return (
         <div

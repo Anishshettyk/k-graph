@@ -81,8 +81,8 @@ export function DetailsPanel({ node, context, namespace, defaultTab }: Props) {
                         key={t}
                         onClick={() => setTab(t)}
                         className={`px-3 py-2 text-xs font-medium capitalize transition-colors whitespace-nowrap ${tab === t
-                                ? 'text-accent border-b-2 border-accent'
-                                : 'text-slate-500 hover:text-slate-300'
+                            ? 'text-accent border-b-2 border-accent'
+                            : 'text-slate-500 hover:text-slate-300'
                             }`}
                     >
                         {t}

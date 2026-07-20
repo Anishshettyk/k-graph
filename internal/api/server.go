@@ -45,8 +45,6 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.handleDoctor(w, r)
 	case "orphan":
 		h.handleOrphan(w, r)
-	case "events":
-		h.handleEvents(w, r)
 	case "rbac":
 		h.handleRBAC(w, r)
 	case "network":
@@ -57,6 +55,15 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.handleYAML(w, r)
 	case "logs":
 		h.handleLogs(w, r)
+	case "metrics":
+		h.handleMetricsSnapshot(w, r)
+	case "events":
+		// /api/events (resource-scoped) vs /api/events/cluster
+		if strings.HasPrefix(strings.TrimPrefix(r.URL.Path, "/api/"), "events/cluster") {
+			h.handleClusterEvents(w, r)
+		} else {
+			h.handleEvents(w, r)
+		}
 	default:
 		writeError(w, http.StatusNotFound, "unknown endpoint: /api/"+seg)
 	}

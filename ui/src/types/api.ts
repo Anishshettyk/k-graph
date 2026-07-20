@@ -214,3 +214,67 @@ export interface LogsResponse {
     context: string
     pods: PodLogResult[]
 }
+
+// ─── Metrics Intelligence ──────────────────────────────────────────────────
+
+export type MetricsSeverity = 'over' | 'critical' | 'warning' | 'ok'
+
+export interface PodMetricsInfo {
+    namespace: string
+    name: string
+    cpuMilli: number
+    cpuLimitMilli: number
+    cpuRequestMilli: number
+    cpuPct: number        // % of limit; -1 = no limit
+    memBytes: number
+    memLimitBytes: number
+    memRequestBytes: number
+    memPct: number        // % of limit; -1 = no limit
+    noLimits: boolean
+    cpuSev: MetricsSeverity
+    memSev: MetricsSeverity
+}
+
+export interface Bottleneck {
+    namespace: string
+    podName: string
+    resource: 'cpu' | 'memory'
+    severity: MetricsSeverity
+    usagePct: number
+    recommendation: string
+}
+
+export interface MetricsSnapshotResponse {
+    context: string
+    namespace: string
+    timestamp: string
+    pods: PodMetricsInfo[]
+    bottlenecks: Bottleneck[]
+    noLimitPods: string[]
+    available: boolean
+}
+
+// ─── Event Intelligence ────────────────────────────────────────────────────
+
+export type EventSeverity = 'cluster-wide' | 'critical' | 'warning' | 'info'
+
+export interface AggregatedEvent {
+    reason: string
+    message: string
+    objects: string[]
+    namespace: string
+    count: number
+    firstSeen: string
+    lastSeen: string
+    type: string
+    severity: EventSeverity
+    isPattern: boolean
+    isClusterWide: boolean
+}
+
+export interface ClusterEventsResponse {
+    context: string
+    namespace: string
+    events: AggregatedEvent[]
+    patterns: number
+}

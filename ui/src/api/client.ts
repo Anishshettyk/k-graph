@@ -2,6 +2,7 @@ import type {
     ContextsResponse, GraphResponse, TreeResponse, WhyResponse,
     DoctorResponse, OrphanResponse, EventsResponse, RBACResponse,
     NetworkResponse, CanReachResponse, YAMLResponse, LogsResponse,
+    MetricsSnapshotResponse, ClusterEventsResponse,
 } from '../types/api'
 
 const BASE = '/api'
@@ -58,4 +59,10 @@ export const api = {
 
     logs: (context: string, namespace: string, resource: string, tail = '300', container = '') =>
         get<LogsResponse>('/logs', { context, namespace, resource, tail, container }),
+
+    metricsSnapshot: (context: string, namespace: string) =>
+        get<MetricsSnapshotResponse>('/metrics', { context, namespace }),
+
+    clusterEvents: (context: string, namespace: string) =>
+        get<ClusterEventsResponse>('/events/cluster', { context, namespace }),
 }

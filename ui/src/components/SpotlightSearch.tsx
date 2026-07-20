@@ -37,7 +37,7 @@ export function SpotlightSearch({ nodes, onSelect, onClose }: Props) {
         const handler = (e: KeyboardEvent) => {
             if (e.key === 'Escape') { onClose(); return }
             if (e.key === 'ArrowDown') { setCursor(c => Math.min(c + 1, results.length - 1)); e.preventDefault() }
-            if (e.key === 'ArrowUp')   { setCursor(c => Math.max(c - 1, 0)); e.preventDefault() }
+            if (e.key === 'ArrowUp') { setCursor(c => Math.max(c - 1, 0)); e.preventDefault() }
             if (e.key === 'Enter' && results[cursor]) confirm(results[cursor])
         }
         window.addEventListener('keydown', handler)

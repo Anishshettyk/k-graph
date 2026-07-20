@@ -14,8 +14,8 @@ import type { NodeInfo } from '../types/api'
 // Formats a relative time string ("2m ago", "just now", etc.)
 function relativeTime(date: Date): string {
     const secs = Math.floor((Date.now() - date.getTime()) / 1000)
-    if (secs < 10)  return 'just now'
-    if (secs < 60)  return `${secs}s ago`
+    if (secs < 10) return 'just now'
+    if (secs < 60) return `${secs}s ago`
     if (secs < 3600) return `${Math.floor(secs / 60)}m ago`
     return `${Math.floor(secs / 3600)}h ago`
 }
@@ -23,15 +23,15 @@ function relativeTime(date: Date): string {
 export function Explorer() {
     const { context, namespace, selectedNode, setSelectedNode } = useStore()
     const queryClient = useQueryClient()
-    const [filterKind, setFilterKind]       = useState('')
-    const [detailsWidth, setDetailsWidth]   = useState(340)
-    const [heatmapMode, setHeatmapMode]     = useState(false)
-    const [isLive, setIsLive]               = useState(false)
-    const [lastRefresh, setLastRefresh]     = useState(new Date())
-    const [relTime, setRelTime]             = useState('just now')
+    const [filterKind, setFilterKind] = useState('')
+    const [detailsWidth, setDetailsWidth] = useState(340)
+    const [heatmapMode, setHeatmapMode] = useState(false)
+    const [isLive, setIsLive] = useState(false)
+    const [lastRefresh, setLastRefresh] = useState(new Date())
+    const [relTime, setRelTime] = useState('just now')
     const [showSpotlight, setShowSpotlight] = useState(false)
-    const [contextMenu, setContextMenu]     = useState<{ x: number; y: number; node: NodeInfo } | null>(null)
-    const [detailsTab, setDetailsTab]       = useState<'why' | 'logs' | 'yaml' | 'events'>('why')
+    const [contextMenu, setContextMenu] = useState<{ x: number; y: number; node: NodeInfo } | null>(null)
+    const [detailsTab, setDetailsTab] = useState<'why' | 'logs' | 'yaml' | 'events'>('why')
     const isResizing = useRef(false)
 
     // ── Relative-time ticker ─────────────────────────────────────────────────
@@ -174,7 +174,7 @@ export function Explorer() {
                             ? `deps of ${selectedNode.kind}/${selectedNode.name}`
                             : filterKind
                                 ? data.nodes.filter(n => n.kind === filterKind).length + ' ' + filterKind
-                                : data.nodes.filter(n => ['Deployment','StatefulSet','DaemonSet','CronJob','Job','Service','Ingress','NetworkPolicy'].includes(n.kind)).length + ' topology nodes'}
+                                : data.nodes.filter(n => ['Deployment', 'StatefulSet', 'DaemonSet', 'CronJob', 'Job', 'Service', 'Ingress', 'NetworkPolicy'].includes(n.kind)).length + ' topology nodes'}
                     </span>
 
                     {selectedNode && (

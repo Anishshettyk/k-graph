@@ -1,22 +1,23 @@
 import { useQuery } from '@tanstack/react-query'
 import {
     Settings, RefreshCw, ChevronDown,
-    Network, Activity, Unlink, Shield, Stethoscope,
-    GitBranch, Globe, Folder
+    Network, Unlink, Shield, Stethoscope,
+    BarChart3, Zap, GitBranch, Globe, Folder,
 } from 'lucide-react'
 import { type LucideIcon } from 'lucide-react'
 import clsx from 'clsx'
 import { api } from '../api/client'
 import { useStore } from '../store/useStore'
 
-type Page = 'explorer' | 'doctor' | 'orphan' | 'rbac' | 'events'
+type Page = 'explorer' | 'doctor' | 'orphan' | 'rbac' | 'events' | 'metrics'
 
 const NAV_ITEMS: { id: Page; label: string; Icon: LucideIcon }[] = [
     { id: 'explorer', label: 'Explorer', Icon: Network },
-    { id: 'doctor', label: 'Doctor', Icon: Stethoscope },
-    { id: 'orphan', label: 'Orphans', Icon: Unlink },
-    { id: 'rbac', label: 'RBAC', Icon: Shield },
-    { id: 'events', label: 'Events', Icon: Activity },
+    { id: 'doctor',   label: 'Doctor',   Icon: Stethoscope },
+    { id: 'metrics',  label: 'Metrics',  Icon: BarChart3 },
+    { id: 'orphan',   label: 'Orphans',  Icon: Unlink },
+    { id: 'rbac',     label: 'RBAC',     Icon: Shield },
+    { id: 'events',   label: 'Events',   Icon: Zap },
 ]
 
 export function TopBar() {

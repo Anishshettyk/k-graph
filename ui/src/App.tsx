@@ -3,6 +3,8 @@ import { Explorer } from './pages/Explorer'
 import { Doctor } from './pages/Doctor'
 import { Orphan } from './pages/Orphan'
 import { RBAC } from './pages/RBAC'
+import { Metrics } from './pages/Metrics'
+import { Events } from './pages/Events'
 import { useStore } from './store/useStore'
 
 export default function App() {
@@ -13,15 +15,13 @@ export default function App() {
             <TopBar />
             <main className="flex-1 overflow-hidden flex">
                 {page === 'explorer' && <Explorer />}
-                {page === 'doctor' && <Doctor />}
-                {page === 'orphan' && <Orphan />}
-                {page === 'rbac' && <RBAC />}
-                {page === 'events' && (
-                    <div className="flex-1 flex items-center justify-center text-slate-600 text-sm">
-                        Select a resource in Explorer and click the Events tab
-                    </div>
-                )}
+                {page === 'doctor'   && <Doctor />}
+                {page === 'orphan'   && <Orphan />}
+                {page === 'rbac'     && <RBAC />}
+                {page === 'events'   && <Events />}
+                {page === 'metrics'  && <Metrics />}
             </main>
         </div>
     )
 }
+
