@@ -26,20 +26,20 @@ const (
 
 // Finding is one status-derived explanation of a failure.
 type Finding struct {
-	Title  string
-	Detail string
+	Title  string `json:"title"`
+	Detail string `json:"detail"`
 }
 
 // Event is a relevant Kubernetes Warning event attached to the diagnosed Pod.
 type Event struct {
-	Reason  string
-	Message string
+	Reason  string `json:"reason"`
+	Message string `json:"message"`
 }
 
 // Log is a bounded excerpt from a failing container's previous execution.
 type Log struct {
-	Container string
-	Excerpt   string
+	Container string `json:"container"`
+	Excerpt   string `json:"excerpt"`
 }
 
 // Report explains one Pod failure. All evidence is returned from read-only

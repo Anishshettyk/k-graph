@@ -391,7 +391,7 @@ func (h *Handler) handleDoctor(w http.ResponseWriter, r *http.Request) {
 	}
 	g := graph.Build(*res)
 	findings := rules.Scan(g, ns)
-	resp := DoctorResponse{Context: ctxName}
+	resp := DoctorResponse{Context: ctxName, Findings: []FindingInfo{}}
 	for _, f := range findings {
 		sev := "warning"
 		if f.Severity == rules.SeverityBlocking {
@@ -426,7 +426,7 @@ func (h *Handler) handleOrphan(w http.ResponseWriter, r *http.Request) {
 	}
 	g := graph.Build(*res)
 	orphans := query.Orphaned(g, ns)
-	resp := OrphanResponse{Context: ctxName}
+	resp := OrphanResponse{Context: ctxName, Orphans: []OrphanInfo{}}
 	for _, o := range orphans {
 		resp.Orphans = append(resp.Orphans, OrphanInfo{
 			Node: nodeToInfo(o.Node), Reason: o.Reason,
@@ -505,7 +505,7 @@ func (h *Handler) handleEvents(w http.ResponseWriter, r *http.Request) {
 	fetchCtx, cancel := context.WithTimeout(reqCtx, 15*time.Second)
 	defer cancel()
 
-	resp := EventsResponse{Context: ctxName}
+	resp := EventsResponse{Context: ctxName, Events: []EventInfo{}}
 	now := time.Now()
 	for _, t := range targets {
 		// Only filter by name — the List call is already scoped to the namespace,
