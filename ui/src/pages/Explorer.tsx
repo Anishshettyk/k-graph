@@ -158,6 +158,7 @@ export function Explorer() {
             <div className="w-64 flex-shrink-0 overflow-hidden">
                 <Sidebar
                     nodes={data.nodes}
+                    edges={data.edges}
                     selectedUID={selectedNode?.uid ?? null}
                     filterKind={filterKind}
                     onSelect={handleSelect}
