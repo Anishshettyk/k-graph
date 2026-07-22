@@ -1,22 +1,129 @@
-import { useState } from 'react'
+import { useState, useMemo, useRef, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Loader2 } from 'lucide-react'
+import { Loader2, Shield, ChevronDown, Search, CheckCircle2, XCircle, ArrowRight, Zap } from 'lucide-react'
+import clsx from 'clsx'
 import { api } from '../api/client'
 import { useStore } from '../store/useStore'
 
-const COMMON_VERBS = ['get', 'list', 'watch', 'create', 'update', 'patch', 'delete']
-const COMMON_RESOURCES = ['pods', 'secrets', 'configmaps', 'deployments', 'services', 'nodes', 'namespaces', 'jobs', 'cronjobs']
+const VERBS = ['get', 'list', 'watch', 'create', 'update', 'patch', 'delete', 'deletecollection']
+
+const RESOURCES: { value: string; group: string; label?: string }[] = [
+    { value: 'pods',                  group: '' },
+    { value: 'pods/log',              group: '',      label: 'pods/log' },
+    { value: 'pods/exec',             group: '',      label: 'pods/exec' },
+    { value: 'secrets',               group: '' },
+    { value: 'configmaps',            group: '' },
+    { value: 'serviceaccounts',       group: '' },
+    { value: 'services',              group: '' },
+    { value: 'endpoints',             group: '' },
+    { value: 'namespaces',            group: '' },
+    { value: 'nodes',                 group: '' },
+    { value: 'events',                group: '' },
+    { value: 'persistentvolumeclaims',group: '',      label: 'PVCs' },
+    { value: 'deployments',           group: 'apps' },
+    { value: 'replicasets',           group: 'apps' },
+    { value: 'statefulsets',          group: 'apps' },
+    { value: 'daemonsets',            group: 'apps' },
+    { value: 'jobs',                  group: 'batch' },
+    { value: 'cronjobs',              group: 'batch' },
+    { value: 'ingresses',             group: 'networking.k8s.io', label: 'ingresses' },
+    { value: 'networkpolicies',       group: 'networking.k8s.io' },
+    { value: 'roles',                 group: 'rbac.authorization.k8s.io' },
+    { value: 'clusterroles',          group: 'rbac.authorization.k8s.io' },
+    { value: 'rolebindings',          group: 'rbac.authorization.k8s.io' },
+    { value: 'clusterrolebindings',   group: 'rbac.authorization.k8s.io' },
+]
+
+// ─── Combobox for ServiceAccount ─────────────────────────────────────────────
+function SACombobox({ value, onChange, options }: {
+    value: string
+    onChange: (v: string) => void
+    options: string[]
+}) {
+    const [open, setOpen] = useState(false)
+    const [filter, setFilter] = useState(value)
+    const ref = useRef<HTMLDivElement>(null)
+
+    useEffect(() => { setFilter(value) }, [value])
+    useEffect(() => {
+        const handler = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) setOpen(false) }
+        document.addEventListener('mousedown', handler)
+        return () => document.removeEventListener('mousedown', handler)
+    }, [])
+
+    const filtered = useMemo(() =>
+        options.filter(o => o.toLowerCase().includes(filter.toLowerCase())).slice(0, 20)
+    , [options, filter])
+
+    return (
+        <div ref={ref} className="relative">
+            <div className={clsx(
+                'flex items-center gap-2 rounded-xl border bg-space-800 px-3 py-2.5 transition-colors',
+                open ? 'border-accent/60' : 'border-space-700 hover:border-space-600'
+            )}>
+                <Search className="w-3.5 h-3.5 text-slate-600 flex-shrink-0" />
+                <input
+                    className="flex-1 bg-transparent text-sm text-slate-200 placeholder-slate-600 outline-none min-w-0"
+                    placeholder="Select or type a ServiceAccount…"
+                    value={filter}
+                    onFocus={() => setOpen(true)}
+                    onChange={e => { setFilter(e.target.value); onChange(e.target.value); setOpen(true) }}
+                />
+                {options.length > 0 && (
+                    <button onClick={() => setOpen(o => !o)} className="text-slate-600 hover:text-slate-400">
+                        <ChevronDown className={clsx('w-3.5 h-3.5 transition-transform', open && 'rotate-180')} />
+                    </button>
+                )}
+            </div>
+            {open && filtered.length > 0 && (
+                <div className="absolute z-50 mt-1 w-full rounded-xl border border-space-700 bg-space-850 shadow-xl overflow-hidden">
+                    <div className="max-h-52 overflow-y-auto py-1">
+                        {filtered.map(opt => (
+                            <button
+                                key={opt}
+                                onMouseDown={e => { e.preventDefault(); onChange(opt); setFilter(opt); setOpen(false) }}
+                                className={clsx(
+                                    'w-full flex items-center gap-2 px-3 py-2 text-left text-sm transition-colors',
+                                    opt === value ? 'bg-accent/15 text-accent' : 'text-slate-300 hover:bg-space-800'
+                                )}
+                            >
+                                <div className="w-5 h-5 rounded-full bg-accent/10 border border-accent/20 flex items-center justify-center flex-shrink-0">
+                                    <span className="text-[8px] font-bold text-accent/80">{opt[0]?.toUpperCase()}</span>
+                                </div>
+                                {opt}
+                                {opt === value && <CheckCircle2 className="w-3.5 h-3.5 text-accent ml-auto" />}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            )}
+        </div>
+    )
+}
 
 export function RBAC() {
     const { context, namespace } = useStore()
     const [sa, setSa] = useState('')
     const [verb, setVerb] = useState('get')
     const [resource, setResource] = useState('secrets')
-    const [apiGroup, setApiGroup] = useState('')
     const [submitted, setSubmitted] = useState(false)
     const [queryKey, setQueryKey] = useState<unknown[]>([])
 
-    const query = useQuery({
+    // Live SA list from graph
+    const graphQuery = useQuery({
+        queryKey: ['graph-sa', context, namespace],
+        queryFn: () => api.graph(context, namespace),
+        enabled: !!context,
+        staleTime: 60_000,
+        select: d => d.nodes.filter(n => n.kind === 'ServiceAccount').map(n => n.name).sort(),
+    })
+    const saOptions = graphQuery.data ?? []
+
+    // Auto-infer API group from resource selection
+    const selectedResource = RESOURCES.find(r => r.value === resource)
+    const apiGroup = selectedResource?.group ?? ''
+
+    const rbacQuery = useQuery({
         queryKey: ['rbac', ...queryKey],
         queryFn: () => api.rbac(context, namespace || 'default', sa, verb, resource, apiGroup),
         enabled: submitted && !!sa,
@@ -24,156 +131,232 @@ export function RBAC() {
         retry: false,
     })
 
-    const handleSubmit = (e: React.FormEvent) => {
-        e.preventDefault()
+    const handleSubmit = (e?: React.FormEvent) => {
+        e?.preventDefault()
+        if (!sa) return
         setQueryKey([context, namespace, sa, verb, resource, apiGroup, Date.now()])
         setSubmitted(true)
     }
 
+    const handleResourceChange = (r: string) => {
+        setResource(r)
+        // re-run if already submitted
+        if (submitted && sa) {
+            const grp = RESOURCES.find(x => x.value === r)?.group ?? ''
+            setQueryKey([context, namespace, sa, verb, r, grp, Date.now()])
+        }
+    }
+
+    const handleVerbChange = (v: string) => {
+        setVerb(v)
+        if (submitted && sa) {
+            setQueryKey([context, namespace, sa, v, resource, apiGroup, Date.now()])
+        }
+    }
+
+    const granted = rbacQuery.data?.verdict === 'GRANTED'
+
     return (
-        <div className="flex-1 overflow-y-auto p-6 max-w-2xl">
-            <h1 className="text-base font-semibold text-slate-100 mb-6">RBAC Path Tracer</h1>
+        <div className="flex-1 overflow-y-auto p-6 max-w-3xl space-y-6">
 
-            <form onSubmit={handleSubmit} className="space-y-4 mb-6">
-                <div className="grid grid-cols-2 gap-3">
-                    <div>
-                        <label className="block text-xs text-slate-500 mb-1">ServiceAccount name</label>
-                        <input
-                            type="text"
-                            value={sa}
-                            onChange={e => setSa(e.target.value)}
-                            placeholder="e.g. api-worker"
-                            className="w-full bg-space-800 border border-space-700 rounded px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-accent placeholder-slate-600"
-                        />
+            {/* ── Header ──────────────────────────────────────────────────────── */}
+            <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-accent/10 border border-accent/20 flex items-center justify-center flex-shrink-0">
+                    <Shield className="w-5 h-5 text-accent" />
+                </div>
+                <div>
+                    <h1 className="text-base font-semibold text-slate-100">RBAC Path Tracer</h1>
+                    <p className="text-xs text-slate-600">Check if a ServiceAccount can perform an action — traces the full binding → role → rule chain</p>
+                </div>
+            </div>
+
+            {/* ── Form card ───────────────────────────────────────────────────── */}
+            <form onSubmit={handleSubmit} className="rounded-2xl border border-space-700 bg-space-900 p-5 space-y-5">
+
+                {/* SA + namespace row */}
+                <div className="grid grid-cols-[1fr_160px] gap-3">
+                    <div className="space-y-1.5">
+                        <label className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">ServiceAccount</label>
+                        <SACombobox value={sa} onChange={setSa} options={saOptions} />
                     </div>
-                    <div>
-                        <label className="block text-xs text-slate-500 mb-1">Namespace</label>
-                        <input
-                            type="text"
-                            value={namespace || 'default'}
-                            readOnly
-                            className="w-full bg-space-850 border border-space-700 rounded px-3 py-2 text-sm text-slate-500 cursor-not-allowed"
-                        />
+                    <div className="space-y-1.5">
+                        <label className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">Namespace</label>
+                        <div className="rounded-xl border border-space-700 bg-space-800/40 px-3 py-2.5 text-sm text-slate-500 font-mono">
+                            {namespace || 'default'}
+                        </div>
                     </div>
                 </div>
 
-                <div className="grid grid-cols-3 gap-3">
-                    <div>
-                        <label className="block text-xs text-slate-500 mb-1">Verb</label>
-                        <select
-                            value={verb}
-                            onChange={e => setVerb(e.target.value)}
-                            className="w-full bg-space-800 border border-space-700 rounded px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-accent"
-                        >
-                            {COMMON_VERBS.map(v => <option key={v} value={v}>{v}</option>)}
-                        </select>
-                    </div>
-                    <div>
-                        <label className="block text-xs text-slate-500 mb-1">Resource</label>
-                        <select
-                            value={resource}
-                            onChange={e => setResource(e.target.value)}
-                            className="w-full bg-space-800 border border-space-700 rounded px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-accent"
-                        >
-                            {COMMON_RESOURCES.map(r => <option key={r} value={r}>{r}</option>)}
-                        </select>
-                    </div>
-                    <div>
-                        <label className="block text-xs text-slate-500 mb-1">API Group <span className="text-slate-600">(optional)</span></label>
-                        <input
-                            type="text"
-                            value={apiGroup}
-                            onChange={e => setApiGroup(e.target.value)}
-                            placeholder="apps, batch…"
-                            className="w-full bg-space-800 border border-space-700 rounded px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-accent placeholder-slate-600"
-                        />
+                {/* Verb pills */}
+                <div className="space-y-1.5">
+                    <label className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">Verb</label>
+                    <div className="flex flex-wrap gap-1.5">
+                        {VERBS.map(v => (
+                            <button
+                                key={v}
+                                type="button"
+                                onClick={() => handleVerbChange(v)}
+                                className={clsx(
+                                    'px-3 py-1 rounded-full text-xs font-medium transition-all border',
+                                    verb === v
+                                        ? 'bg-accent/20 border-accent/50 text-accent'
+                                        : 'bg-space-800 border-space-700 text-slate-500 hover:text-slate-300 hover:border-space-600'
+                                )}
+                            >{v}</button>
+                        ))}
                     </div>
                 </div>
 
+                {/* Resource selector */}
+                <div className="space-y-1.5">
+                    <label className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">Resource</label>
+                    <div className="flex flex-wrap gap-1.5">
+                        {RESOURCES.map(r => (
+                            <button
+                                key={r.value}
+                                type="button"
+                                onClick={() => handleResourceChange(r.value)}
+                                className={clsx(
+                                    'px-3 py-1 rounded-full text-xs font-medium transition-all border',
+                                    resource === r.value
+                                        ? 'bg-violet-500/20 border-violet-500/50 text-violet-300'
+                                        : 'bg-space-800 border-space-700 text-slate-500 hover:text-slate-300 hover:border-space-600'
+                                )}
+                            >{r.label ?? r.value}</button>
+                        ))}
+                    </div>
+                    {apiGroup && (
+                        <p className="text-[10px] text-slate-600">
+                            API group auto-detected: <span className="font-mono text-accent/70">{apiGroup}</span>
+                        </p>
+                    )}
+                </div>
+
+                {/* Submit */}
                 <button
                     type="submit"
                     disabled={!sa}
-                    className="px-4 py-2 rounded bg-accent/20 border border-accent/30 text-accent text-sm font-medium hover:bg-accent/30 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                    className={clsx(
+                        'w-full py-2.5 rounded-xl text-sm font-semibold transition-all flex items-center justify-center gap-2',
+                        sa
+                            ? 'bg-accent/20 border border-accent/40 text-accent hover:bg-accent/30'
+                            : 'bg-space-800 border border-space-700 text-slate-600 cursor-not-allowed'
+                    )}
                 >
+                    {rbacQuery.isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
                     Check Permission
                 </button>
             </form>
 
-            {query.isLoading && (
-                <div className="flex items-center gap-2 text-xs text-slate-500">
-                    <Loader2 className="w-4 h-4 text-accent animate-spin" />
-                    Evaluating RBAC policies…
+            {/* ── Error ───────────────────────────────────────────────────────── */}
+            {rbacQuery.error && (
+                <div className="rounded-xl border border-red-900/40 bg-red-950/10 p-4 text-xs text-status-unhealthy flex items-center gap-2">
+                    <XCircle className="w-4 h-4 flex-shrink-0" />
+                    {(rbacQuery.error as Error).message}
                 </div>
             )}
 
-            {query.error && (
-                <div className="rounded-lg border border-red-900/40 bg-red-950/10 p-3 text-xs text-status-unhealthy">
-                    {(query.error as Error).message}
-                </div>
-            )}
+            {/* ── Result ──────────────────────────────────────────────────────── */}
+            {rbacQuery.data && (() => {
+                const d = rbacQuery.data
+                const matchingChecks = d.checks.filter(c => c.subjectMatch)
+                return (
+                    <div className="space-y-4">
 
-            {query.data && (
-                <div className="space-y-4">
-                    {/* Verdict */}
-                    <div className={`rounded-lg border p-4 flex items-center gap-3 ${query.data.verdict === 'GRANTED'
-                            ? 'border-emerald-900/50 bg-emerald-950/10'
-                            : 'border-red-900/50 bg-red-950/10'
-                        }`}>
-                        <span className={`text-2xl ${query.data.verdict === 'GRANTED' ? 'text-status-healthy' : 'text-status-unhealthy'}`}>
-                            {query.data.verdict === 'GRANTED' ? '✓' : '✖'}
-                        </span>
-                        <div>
-                            <div className={`text-sm font-semibold ${query.data.verdict === 'GRANTED' ? 'text-status-healthy' : 'text-status-unhealthy'}`}>
-                                {query.data.verdict}
+                        {/* Verdict banner */}
+                        <div className={clsx(
+                            'rounded-2xl border p-5 flex items-center gap-4',
+                            granted
+                                ? 'border-emerald-800/40 bg-emerald-950/10'
+                                : 'border-red-800/40 bg-red-950/10'
+                        )}>
+                            <div className={clsx(
+                                'w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0 text-2xl',
+                                granted ? 'bg-emerald-950/60 text-status-healthy' : 'bg-red-950/60 text-status-unhealthy'
+                            )}>
+                                {granted ? '✓' : '✖'}
                             </div>
-                            <div className="text-xs text-slate-500 font-mono">
-                                {verb} {resource} {apiGroup ? `(${apiGroup})` : '(core)'}
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Grant paths */}
-                    {query.data.paths && query.data.paths.length > 0 && (
-                        <div>
-                            <div className="text-xs uppercase tracking-widest text-accent/70 mb-2">Grant paths</div>
-                            {query.data.paths.map((p, i) => (
-                                <div key={i} className="rounded-lg border border-space-700 bg-space-850 p-3 mb-2 space-y-1">
-                                    <div className="text-xs font-mono">
-                                        <span className="text-slate-500">{p.bindingKind}/</span>
-                                        <span className="text-accent">{p.bindingName}</span>
-                                        {p.bindingNs && <span className="text-slate-600"> ({p.bindingNs})</span>}
-                                    </div>
-                                    <div className="text-xs text-slate-500">
-                                        → {p.roleKind}/<span className="text-slate-300">{p.roleName}</span>
-                                        <span className="text-status-healthy ml-2">rules[{p.ruleIndex}] ✓</span>
-                                    </div>
+                            <div className="flex-1 min-w-0">
+                                <div className={clsx('text-lg font-bold tracking-tight', granted ? 'text-status-healthy' : 'text-status-unhealthy')}>
+                                    {granted ? 'GRANTED' : 'DENIED'}
                                 </div>
-                            ))}
-                        </div>
-                    )}
-
-                    {/* Binding evaluation */}
-                    <div>
-                        <div className="text-xs uppercase tracking-widest text-accent/70 mb-2">Binding evaluation</div>
-                        {query.data.checks.filter(c => c.subjectMatch).map((c, i) => (
-                            <div key={i} className="flex items-center gap-2 text-xs py-1.5 border-b border-space-800">
-                                <span className={c.grants ? 'text-status-healthy' : 'text-status-unhealthy'}>
-                                    {c.grants ? '✓' : '✖'}
-                                </span>
-                                <span className="font-mono text-slate-400">{c.bindingKind}/{c.bindingName}</span>
-                                <span className="text-slate-600">→</span>
-                                <span className="font-mono text-slate-500">{c.roleKind}/{c.roleName}</span>
-                                <span className="ml-auto text-slate-600 text-[10px]">
-                                    {c.grants ? 'grants' : 'no matching rule'}
-                                </span>
+                                <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                                    <span className="text-xs font-mono bg-space-800 border border-space-700 rounded-full px-2 py-0.5 text-slate-400">{d.serviceAccount}</span>
+                                    <ArrowRight className="w-3 h-3 text-slate-600" />
+                                    <span className="text-xs font-mono bg-space-800 border border-space-700 rounded-full px-2 py-0.5 text-accent/80">{verb}</span>
+                                    <span className="text-xs font-mono bg-space-800 border border-space-700 rounded-full px-2 py-0.5 text-violet-400">{resource}</span>
+                                    {apiGroup && <span className="text-xs font-mono text-slate-600">({apiGroup})</span>}
+                                </div>
                             </div>
-                        ))}
-                        {query.data.checks.filter(c => c.subjectMatch).length === 0 && (
-                            <div className="text-xs text-slate-600">No bindings reference this ServiceAccount</div>
+                        </div>
+
+                        {/* Grant paths */}
+                        {d.paths && d.paths.length > 0 && (
+                            <div className="rounded-2xl border border-space-700 bg-space-900 overflow-hidden">
+                                <div className="px-4 py-3 border-b border-space-700 flex items-center gap-2">
+                                    <CheckCircle2 className="w-4 h-4 text-status-healthy" />
+                                    <span className="text-xs font-semibold uppercase tracking-widest text-slate-400">Grant Paths</span>
+                                </div>
+                                <div className="divide-y divide-space-800">
+                                    {d.paths.map((p, i) => (
+                                        <div key={i} className="px-4 py-3 flex items-center gap-2 flex-wrap">
+                                            <span className="text-[10px] font-mono text-slate-500">{p.bindingKind}</span>
+                                            <span className="text-xs font-mono font-medium text-accent">{p.bindingName}</span>
+                                            {p.bindingNs && <span className="text-[10px] text-slate-600 font-mono">({p.bindingNs})</span>}
+                                            <ArrowRight className="w-3 h-3 text-slate-700 flex-shrink-0" />
+                                            <span className="text-[10px] font-mono text-slate-500">{p.roleKind}/</span>
+                                            <span className="text-xs font-mono font-medium text-slate-300">{p.roleName}</span>
+                                            <span className="ml-auto text-[10px] text-status-healthy bg-emerald-950/40 border border-emerald-900/30 rounded-full px-2 py-0.5">
+                                                rules[{p.ruleIndex}] ✓
+                                            </span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
                         )}
+
+                        {/* Binding evaluation */}
+                        <div className="rounded-2xl border border-space-700 bg-space-900 overflow-hidden">
+                            <div className="px-4 py-3 border-b border-space-700 flex items-center gap-2">
+                                <Shield className="w-4 h-4 text-slate-500" />
+                                <span className="text-xs font-semibold uppercase tracking-widest text-slate-400">Binding Evaluation</span>
+                                <span className="text-[10px] text-slate-600 ml-auto">{matchingChecks.length} binding{matchingChecks.length !== 1 ? 's' : ''} checked</span>
+                            </div>
+                            {matchingChecks.length === 0 ? (
+                                <div className="px-4 py-4 text-xs text-slate-600 flex items-center gap-2">
+                                    <XCircle className="w-3.5 h-3.5" />
+                                    No bindings reference this ServiceAccount
+                                </div>
+                            ) : (
+                                <div className="divide-y divide-space-800">
+                                    {matchingChecks.map((c, i) => (
+                                        <div key={i} className="px-4 py-2.5 flex items-center gap-3">
+                                            <span className={clsx(
+                                                'w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-bold',
+                                                c.grants ? 'bg-emerald-950/60 text-status-healthy' : 'bg-space-800 text-slate-600'
+                                            )}>
+                                                {c.grants ? '✓' : '·'}
+                                            </span>
+                                            <span className="text-xs font-mono text-slate-400 truncate">{c.bindingKind}/{c.bindingName}</span>
+                                            <ArrowRight className="w-3 h-3 text-slate-700 flex-shrink-0" />
+                                            <span className="text-xs font-mono text-slate-500 truncate">{c.roleKind}/{c.roleName}</span>
+                                            <span className={clsx(
+                                                'ml-auto text-[10px] rounded-full px-2 py-0.5 flex-shrink-0 font-medium',
+                                                c.grants
+                                                    ? 'text-status-healthy bg-emerald-950/40 border border-emerald-900/30'
+                                                    : 'text-slate-600 bg-space-800 border border-space-700'
+                                            )}>
+                                                {c.grants ? 'grants' : 'no match'}
+                                            </span>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
                     </div>
-                </div>
-            )}
+                )
+            })()}
         </div>
     )
 }
+
