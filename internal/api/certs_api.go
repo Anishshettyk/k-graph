@@ -25,17 +25,17 @@ const (
 )
 
 type CertInfo struct {
-	SecretName  string       `json:"secretName"`
-	Namespace   string       `json:"namespace"`
-	CommonName  string       `json:"commonName"`
-	DNSNames    []string     `json:"dnsNames"`
-	Issuer      string       `json:"issuer"`
-	NotBefore   time.Time    `json:"notBefore"`
-	NotAfter    time.Time    `json:"notAfter"`
-	DaysLeft    int          `json:"daysLeft"`
-	Severity    CertSeverity `json:"severity"`
-	Expired     bool         `json:"expired"`
-	ParseError  string       `json:"parseError,omitempty"`
+	SecretName string       `json:"secretName"`
+	Namespace  string       `json:"namespace"`
+	CommonName string       `json:"commonName"`
+	DNSNames   []string     `json:"dnsNames"`
+	Issuer     string       `json:"issuer"`
+	NotBefore  time.Time    `json:"notBefore"`
+	NotAfter   time.Time    `json:"notAfter"`
+	DaysLeft   int          `json:"daysLeft"`
+	Severity   CertSeverity `json:"severity"`
+	Expired    bool         `json:"expired"`
+	ParseError string       `json:"parseError,omitempty"`
 }
 
 type CertsResponse struct {
@@ -109,13 +109,18 @@ func (h *Handler) handleCerts(w http.ResponseWriter, r *http.Request) {
 			SecretName: secret.Name,
 			Namespace:  secret.Namespace,
 			CommonName: cert.Subject.CommonName,
-			DNSNames:   func() []string { if cert.DNSNames == nil { return []string{} }; return cert.DNSNames }(),
-			Issuer:     cert.Issuer.CommonName,
-			NotBefore:  cert.NotBefore,
-			NotAfter:   cert.NotAfter,
-			DaysLeft:   daysLeft,
-			Severity:   sev,
-			Expired:    expired,
+			DNSNames: func() []string {
+				if cert.DNSNames == nil {
+					return []string{}
+				}
+				return cert.DNSNames
+			}(),
+			Issuer:    cert.Issuer.CommonName,
+			NotBefore: cert.NotBefore,
+			NotAfter:  cert.NotAfter,
+			DaysLeft:  daysLeft,
+			Severity:  sev,
+			Expired:   expired,
 		})
 	}
 

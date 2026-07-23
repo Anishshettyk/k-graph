@@ -7,21 +7,26 @@ import {
     Handle, Position, MarkerType,
 } from '@xyflow/react'
 import dagre from 'dagre'
-import { Loader2, Globe, Network, Shield, RefreshCw, Info } from 'lucide-react'
+import { Loader2, Globe, Network, Shield, RefreshCw, Info, AlertTriangle } from 'lucide-react'
 import clsx from 'clsx'
 import '@xyflow/react/dist/style.css'
 import { api } from '../api/client'
 import { useStore } from '../store/useStore'
 import type { NodeInfo } from '../types/api'
 
+// Max pods shown per service in the topology to avoid overwhelming the graph.
+const MAX_PODS_PER_SERVICE = 8
+// Max total services shown.
+const MAX_SERVICES = 60
+
 // ─── Colour palette ──────────────────────────────────────────────────────────
 const C = {
-    internet:  { bg: '#0f172a', border: '#38bdf8', glow: '#38bdf8', text: '#7dd3fc' },
-    ingress:   { bg: '#1e0a1e', border: '#e879f9', glow: '#d946ef', text: '#f0abfc' },
-    service:   { bg: '#0a1628', border: '#3b82f6', glow: '#2563eb', text: '#93c5fd' },
-    pod_ok:    { bg: '#071a10', border: '#22c55e', glow: '#16a34a', text: '#86efac' },
-    pod_bad:   { bg: '#1a0707', border: '#ef4444', glow: '#dc2626', text: '#fca5a5' },
-    policy:    { bg: '#1a1000', border: '#f59e0b', glow: '#d97706', text: '#fcd34d' },
+    internet: { bg: '#0f172a', border: '#38bdf8', glow: '#38bdf8', text: '#7dd3fc' },
+    ingress: { bg: '#1e0a1e', border: '#e879f9', glow: '#d946ef', text: '#f0abfc' },
+    service: { bg: '#0a1628', border: '#3b82f6', glow: '#2563eb', text: '#93c5fd' },
+    pod_ok: { bg: '#071a10', border: '#22c55e', glow: '#16a34a', text: '#86efac' },
+    pod_bad: { bg: '#1a0707', border: '#ef4444', glow: '#dc2626', text: '#fca5a5' },
+    policy: { bg: '#1a1000', border: '#f59e0b', glow: '#d97706', text: '#fcd34d' },
 }
 
 // ─── Custom node components ───────────────────────────────────────────────────
@@ -108,10 +113,10 @@ function PolicyNode({ data }: { data: { node: NodeInfo } }) {
 
 const nodeTypes = {
     internet: InternetNode,
-    ingress:  IngressNode,
-    service:  ServiceNode,
-    pod:      PodNode,
-    policy:   PolicyNode,
+    ingress: IngressNode,
+    service: ServiceNode,
+    pod: PodNode,
+    policy: PolicyNode,
 }
 
 // ─── Dagre layout ─────────────────────────────────────────────────────────────
@@ -132,46 +137,33 @@ function layout(nodes: Node[], edges: Edge[], dir = 'LR'): { nodes: Node[]; edge
 }
 
 // ─── Main canvas ──────────────────────────────────────────────────────────────
-function NetworkCanvas({ graphData }: { graphData: { nodes: NodeInfo[]; edges: { from: string; to: string; rel: string }[] } }) {
+function NetworkCanvas({ graphData }: {
+    graphData: { nodes: NodeInfo[]; edges: { from: string; to: string; rel: string }[] }
+}) {
     const [selectedNode, setSelectedNode] = useState<NodeInfo | null>(null)
 
-    const { rfNodes, rfEdges } = useMemo(() => {
+    const { rfNodes, rfEdges, svcTruncated, totalSvcs } = useMemo(() => {
         const nodeByUID: Record<string, NodeInfo> = {}
         for (const n of graphData.nodes) nodeByUID[n.uid] = n
 
-        const ingresses  = graphData.nodes.filter(n => n.kind === 'Ingress')
-        const services   = graphData.nodes.filter(n => n.kind === 'Service')
-        const policies   = graphData.nodes.filter(n => n.kind === 'NetworkPolicy')
+        const ingresses = graphData.nodes.filter(n => n.kind === 'Ingress')
+        const services  = graphData.nodes.filter(n => n.kind === 'Service')
+        const policies  = graphData.nodes.filter(n => n.kind === 'NetworkPolicy')
+        const svcTruncated = services.length > MAX_SERVICES
+        const totalSvcs    = services.length
 
         const rfNodes: Node[] = []
         const rfEdges: Edge[] = []
 
-        const edgeStyle = (color: string) => ({
-            stroke: color, strokeWidth: 2,
-        })
+        const edgeStyle = (color: string) => ({ stroke: color, strokeWidth: 2 })
 
-        // Add services and pods reachable from services
-        const reachableServiceUIDs = new Set<string>()
-        const reachablePodUIDs = new Set<string>()
-
-        for (const svc of services) {
-            reachableServiceUIDs.add(svc.uid)
-            for (const e of graphData.edges) {
-                if (e.from === svc.uid && e.rel === 'selects') {
-                    reachablePodUIDs.add(e.to)
-                }
-            }
-        }
-
-        // Internet node (only if there are ingresses)
+        // Internet entry node
         if (ingresses.length > 0) {
             rfNodes.push({ id: '__internet__', type: 'internet', position: { x: 0, y: 0 }, data: {} })
             for (const ing of ingresses) {
                 rfEdges.push({
-                    id: `internet-${ing.uid}`,
-                    source: '__internet__', target: ing.uid,
-                    animated: true,
-                    style: edgeStyle(C.ingress.border),
+                    id: `internet-${ing.uid}`, source: '__internet__', target: ing.uid,
+                    animated: true, style: edgeStyle(C.ingress.border),
                     markerEnd: { type: MarkerType.ArrowClosed, color: C.ingress.border },
                     label: 'HTTP/S',
                     labelStyle: { fill: C.ingress.text, fontSize: 9, fontFamily: 'monospace' },
@@ -185,16 +177,19 @@ function NetworkCanvas({ graphData }: { graphData: { nodes: NodeInfo[]; edges: {
             rfNodes.push({ id: n.uid, type: 'ingress', position: { x: 0, y: 0 }, data: { node: n } })
         }
 
+        // Service nodes (capped)
+        const cappedServices = services.slice(0, MAX_SERVICES)
+        const cappedSvcUIDs  = new Set(cappedServices.map(s => s.uid))
+        for (const n of cappedServices) {
+            rfNodes.push({ id: n.uid, type: 'service', position: { x: 0, y: 0 }, data: { node: n } })
+        }
+
         // Ingress → Service edges
         for (const e of graphData.edges) {
-            if (e.rel === 'routes to') {
-                const svc = nodeByUID[e.to]
-                if (!svc) continue
+            if (e.rel === 'routes to' && cappedSvcUIDs.has(e.to)) {
                 rfEdges.push({
-                    id: `${e.from}-${e.to}`,
-                    source: e.from, target: e.to,
-                    animated: true,
-                    style: edgeStyle(C.service.border),
+                    id: `${e.from}-${e.to}`, source: e.from, target: e.to,
+                    animated: true, style: edgeStyle(C.service.border),
                     markerEnd: { type: MarkerType.ArrowClosed, color: C.service.border },
                     label: 'routes to',
                     labelStyle: { fill: C.service.text, fontSize: 9, fontFamily: 'monospace' },
@@ -203,47 +198,43 @@ function NetworkCanvas({ graphData }: { graphData: { nodes: NodeInfo[]; edges: {
             }
         }
 
-        // Service nodes (all)
-        for (const n of services) {
-            rfNodes.push({ id: n.uid, type: 'service', position: { x: 0, y: 0 }, data: { node: n } })
+        // Service → Pod edges (capped per service)
+        const podCntBySvc: Record<string, number> = {}
+        for (const e of graphData.edges) {
+            if (e.rel !== 'selects' || !cappedSvcUIDs.has(e.from)) continue
+            podCntBySvc[e.from] = (podCntBySvc[e.from] ?? 0) + 1
+            if (podCntBySvc[e.from] > MAX_PODS_PER_SERVICE) continue
+            const pod = nodeByUID[e.to]
+            if (!pod) continue
+            if (!rfNodes.find(n => n.id === pod.uid)) {
+                rfNodes.push({ id: pod.uid, type: 'pod', position: { x: 0, y: 0 }, data: { node: pod } })
+            }
+            rfEdges.push({
+                id: `${e.from}-${e.to}`, source: e.from, target: e.to,
+                animated: true,
+                style: edgeStyle(pod.healthy ? C.pod_ok.border : C.pod_bad.border),
+                markerEnd: { type: MarkerType.ArrowClosed, color: pod.healthy ? C.pod_ok.border : C.pod_bad.border },
+            })
         }
 
-        // Service → Pod edges
-        for (const e of graphData.edges) {
-            if (e.rel === 'selects') {
-                const pod = nodeByUID[e.to]
-                if (!pod) continue
-                if (!rfNodes.find(n => n.id === pod.uid)) {
-                    rfNodes.push({ id: pod.uid, type: 'pod', position: { x: 0, y: 0 }, data: { node: pod } })
-                }
+        // NetworkPolicy nodes + edges (only for visible pods)
+        const visiblePodUIDs = new Set(rfNodes.filter(n => n.type === 'pod').map(n => n.id))
+        for (const pol of policies) {
+            const govEdges = graphData.edges.filter(e => e.from === pol.uid && e.rel === 'policy selects' && visiblePodUIDs.has(e.to))
+            if (govEdges.length === 0) continue
+            rfNodes.push({ id: pol.uid, type: 'policy', position: { x: 0, y: 0 }, data: { node: pol } })
+            for (const e of govEdges) {
                 rfEdges.push({
-                    id: `${e.from}-${e.to}`,
-                    source: e.from, target: e.to,
-                    animated: true,
-                    style: edgeStyle(pod.healthy ? C.pod_ok.border : C.pod_bad.border),
-                    markerEnd: { type: MarkerType.ArrowClosed, color: pod.healthy ? C.pod_ok.border : C.pod_bad.border },
+                    id: `pol-${pol.uid}-${e.to}`, source: pol.uid, target: e.to,
+                    animated: false,
+                    style: { stroke: C.policy.border, strokeWidth: 1.5, strokeDasharray: '4 3' },
+                    markerEnd: { type: MarkerType.Arrow, color: C.policy.border },
                 })
             }
         }
 
-        // NetworkPolicy nodes + edges
-        for (const pol of policies) {
-            rfNodes.push({ id: pol.uid, type: 'policy', position: { x: 0, y: 0 }, data: { node: pol } })
-            for (const e of graphData.edges) {
-                if (e.from === pol.uid && e.rel === 'policy selects') {
-                    rfEdges.push({
-                        id: `pol-${pol.uid}-${e.to}`,
-                        source: pol.uid, target: e.to,
-                        animated: false,
-                        style: { stroke: C.policy.border, strokeWidth: 1.5, strokeDasharray: '4 3' },
-                        markerEnd: { type: MarkerType.Arrow, color: C.policy.border },
-                    })
-                }
-            }
-        }
-
         const laid = layout(rfNodes, rfEdges)
-        return { rfNodes: laid.nodes, rfEdges: laid.edges }
+        return { rfNodes: laid.nodes, rfEdges: laid.edges, svcTruncated, totalSvcs }
     }, [graphData])
 
     const [nodes, , onNodesChange] = useNodesState(rfNodes)
@@ -275,9 +266,9 @@ function NetworkCanvas({ graphData }: { graphData: { nodes: NodeInfo[]; edges: {
                 <MiniMap
                     nodeColor={(n) => {
                         if (n.type === 'internet') return C.internet.border
-                        if (n.type === 'ingress')  return C.ingress.border
-                        if (n.type === 'service')  return C.service.border
-                        if (n.type === 'policy')   return C.policy.border
+                        if (n.type === 'ingress') return C.ingress.border
+                        if (n.type === 'service') return C.service.border
+                        if (n.type === 'policy') return C.policy.border
                         const ni = (n.data as { node?: NodeInfo }).node
                         return ni?.healthy ? C.pod_ok.border : C.pod_bad.border
                     }}
@@ -285,6 +276,16 @@ function NetworkCanvas({ graphData }: { graphData: { nodes: NodeInfo[]; edges: {
                     maskColor="#03071288"
                 />
             </ReactFlow>
+
+            {/* Truncation warning */}
+            {svcTruncated && (
+                <div className="absolute top-3 left-1/2 -translate-x-1/2 z-10">
+                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-amber-950/90 backdrop-blur border border-amber-800/60 text-amber-400 text-[10px]">
+                        <AlertTriangle className="w-3 h-3" />
+                        Showing {MAX_SERVICES} of {totalSvcs} services — use namespace filter to narrow
+                    </div>
+                </div>
+            )}
 
             {/* Selected node info panel */}
             {selectedNode && (
@@ -338,9 +339,9 @@ export function NetworkTopology() {
 
     const data = graphQuery.data!
     const ingresses = data.nodes.filter(n => n.kind === 'Ingress').length
-    const services  = data.nodes.filter(n => n.kind === 'Service').length
-    const policies  = data.nodes.filter(n => n.kind === 'NetworkPolicy').length
-    const pods      = data.nodes.filter(n => n.kind === 'Pod').length
+    const services = data.nodes.filter(n => n.kind === 'Service').length
+    const policies = data.nodes.filter(n => n.kind === 'NetworkPolicy').length
+    const pods = data.nodes.filter(n => n.kind === 'Pod').length
     const unhealthy = data.nodes.filter(n => n.kind === 'Pod' && !n.healthy).length
 
     return (
@@ -353,10 +354,10 @@ export function NetworkTopology() {
                 </div>
                 <div className="h-3 w-px bg-space-700" />
                 <StatChip label="Ingresses" value={ingresses} color="text-fuchsia-400" />
-                <StatChip label="Services"  value={services}  color="text-blue-400" />
-                <StatChip label="Pods"      value={pods}      color="text-emerald-400" />
+                <StatChip label="Services" value={services} color="text-blue-400" />
+                <StatChip label="Pods" value={pods} color="text-emerald-400" />
                 {unhealthy > 0 && <StatChip label="Unhealthy" value={unhealthy} color="text-red-400" pulsing />}
-                {policies > 0  && <StatChip label="Policies"  value={policies}  color="text-amber-400" />}
+                {policies > 0 && <StatChip label="Policies" value={policies} color="text-amber-400" />}
                 <div className="ml-auto flex items-center gap-2">
                     <span className="text-[9px] text-slate-600">Click a node for details · scroll to zoom</span>
                     <button onClick={() => graphQuery.refetch()} className="p-1.5 rounded border border-space-700 text-slate-600 hover:text-accent transition-colors">

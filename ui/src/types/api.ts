@@ -27,6 +27,8 @@ export interface GraphResponse {
     namespace: string
     nodes: NodeInfo[]
     edges: EdgeInfo[]
+    total: number
+    truncated: boolean
 }
 
 export interface TreeNode {

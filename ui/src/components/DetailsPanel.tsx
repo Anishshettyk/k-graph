@@ -334,7 +334,7 @@ function HistoryTab({ query }: { query: ReturnType<typeof useQuery<HistoryRespon
             {revisions.map((rev, i) => {
                 const revNum = total - i
                 const healthy = rev.readyReplicas === rev.desiredReplicas && rev.desiredReplicas > 0
-                const idle    = rev.replicas === 0
+                const idle = rev.replicas === 0
                 const isSelected = selected.has(rev.name)
                 return (
                     <div key={rev.name}
@@ -342,8 +342,8 @@ function HistoryTab({ query }: { query: ReturnType<typeof useQuery<HistoryRespon
                         className={clsx(
                             'rounded-lg border p-3 space-y-2 cursor-pointer transition-all',
                             rev.isCurrent && !isSelected ? 'border-accent/40 bg-accent/5 hover:bg-accent/10' :
-                            isSelected ? 'border-violet-500/60 bg-violet-950/20 ring-1 ring-violet-500/30' :
-                            'border-space-700 bg-space-850 hover:border-space-600'
+                                isSelected ? 'border-violet-500/60 bg-violet-950/20 ring-1 ring-violet-500/30' :
+                                    'border-space-700 bg-space-850 hover:border-space-600'
                         )}>
                         <div className="flex items-center gap-2">
                             {/* Selection indicator */}
@@ -404,9 +404,9 @@ function RevisionDiff({ newer, older, total, revisions, onBack }: {
 
     const newerImgs = new Set(newer.images ?? [])
     const olderImgs = new Set(older.images ?? [])
-    const addedImgs   = [...newerImgs].filter(i => !olderImgs.has(i))
+    const addedImgs = [...newerImgs].filter(i => !olderImgs.has(i))
     const removedImgs = [...olderImgs].filter(i => !newerImgs.has(i))
-    const sameImgs    = [...newerImgs].filter(i => olderImgs.has(i))
+    const sameImgs = [...newerImgs].filter(i => olderImgs.has(i))
 
     const daysDiff = Math.round(
         (new Date(newer.createdAt).getTime() - new Date(older.createdAt).getTime()) / 86400000

@@ -41,6 +41,10 @@ const TOP_WORKLOAD_KINDS = new Set(['Deployment', 'StatefulSet', 'DaemonSet', 'C
 const DEFAULT_EXPANDED = new Set(['workloads', 'network', 'security', 'config'])
 const DEFAULT_EXPANDED_SUBS = new Set(['rbac', 'identity', 'netpol', 'configmaps', 'secrets', 'storage'])
 
+// Items per category before "show more" appears — prevents rendering thousands
+// of rows in a large cluster which would make the DOM extremely slow.
+const CATEGORY_PAGE_SIZE = 50
+
 function sortNodes(items: NodeInfo[]): NodeInfo[] {
     return [...items].sort((a, b) => {
         const aU = a.kind === 'Pod' && !a.healthy ? 1 : 0
@@ -187,9 +191,13 @@ function SubGroup({ id, label, icon: Icon, items, expanded, onToggle, selectedUI
     onSelect: (node: NodeInfo) => void
     depth?: number
 }) {
+    const [showAll, setShowAll] = useState(false)
     const isOpen = expanded.has(id)
     if (items.length === 0) return null
     const paddingLeft = 20 + depth * 14
+    const sorted = sortNodes(items)
+    const visible = showAll ? sorted : sorted.slice(0, CATEGORY_PAGE_SIZE)
+    const hidden = sorted.length - visible.length
     return (
         <div>
             <button
@@ -206,9 +214,16 @@ function SubGroup({ id, label, icon: Icon, items, expanded, onToggle, selectedUI
             </button>
             {isOpen && (
                 <div className="space-y-px">
-                    {sortNodes(items).map(node => (
+                    {visible.map(node => (
                         <NodeRow key={node.uid} node={node} depth={1} selectedUID={selectedUID} onSelect={onSelect} />
                     ))}
+                    {hidden > 0 && (
+                        <button onClick={() => setShowAll(true)}
+                            className="w-full text-[9px] text-slate-600 hover:text-accent py-1 transition-colors"
+                            style={{ paddingLeft: paddingLeft + 20 }}>
+                            + {hidden} more
+                        </button>
+                    )}
                 </div>
             )}
         </div>
@@ -406,21 +421,61 @@ export function Sidebar({ nodes, edges, selectedUID, onSelect }: Props) {
                 {flatGroups.map(({ id, label, icon: CatIcon, items }) => {
                     const unhealthy = items.filter(n => n.kind === 'Pod' && !n.healthy).length
                     return (
-                        <div key={id} className="mb-1">
-                            <CatHeader id={id} label={label} CatIcon={CatIcon}
-                                count={items.length} unhealthyCount={unhealthy} />
-                            {(expanded.has(id) || !!lower) && (
-                                <div className="mb-2 space-y-px">
-                                    {sortNodes(items).map(node => (
-                                        <NodeRow key={node.uid} node={node} depth={0}
-                                            selectedUID={selectedUID} onSelect={onSelect} />
-                                    ))}
-                                </div>
-                            )}
-                        </div>
+                        <FlatGroup key={id} id={id} label={label} CatIcon={CatIcon}
+                            items={items} unhealthy={unhealthy}
+                            expanded={expanded} toggle={toggle}
+                            selectedUID={selectedUID} onSelect={onSelect} lower={lower} />
                     )
                 })}
             </div>
+        </div>
+    )
+}
+
+function FlatGroup({ id, label, CatIcon, items, unhealthy, expanded, toggle, selectedUID, onSelect, lower }: {
+    id: string; label: string; CatIcon: React.ElementType
+    items: NodeInfo[]; unhealthy: number
+    expanded: Set<string>; toggle: (id: string) => void
+    selectedUID: string | null; onSelect: (node: NodeInfo) => void
+    lower: string
+}) {
+    const [showAll, setShowAll] = useState(false)
+    const isOpen = expanded.has(id) || !!lower
+    const sorted = sortNodes(items)
+    const visible = showAll || lower ? sorted : sorted.slice(0, CATEGORY_PAGE_SIZE)
+    const hidden = sorted.length - visible.length
+
+    return (
+        <div className="mb-1">
+            <button onClick={() => toggle(id)}
+                className="w-full flex items-center gap-2 px-3 py-2 hover:bg-space-800/60 transition-colors group">
+                <span className="text-slate-600 group-hover:text-slate-400 transition-colors flex-shrink-0 w-3">
+                    {isOpen ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                </span>
+                <CatIcon className="w-4 h-4 text-slate-400" />
+                <span className="text-xs font-semibold uppercase tracking-widest flex-1 text-left text-slate-300">{label}</span>
+                <div className="flex items-center gap-1.5 flex-shrink-0">
+                    {unhealthy > 0 && (
+                        <span className="text-[10px] font-bold text-status-unhealthy bg-red-950/60 rounded px-1.5 py-0.5 leading-none">
+                            {unhealthy} err
+                        </span>
+                    )}
+                    <span className="text-[10px] text-slate-500 tabular-nums min-w-[18px] text-right">{items.length}</span>
+                </div>
+            </button>
+            {isOpen && (
+                <div className="mb-2 space-y-px">
+                    {visible.map(node => (
+                        <NodeRow key={node.uid} node={node} depth={0} selectedUID={selectedUID} onSelect={onSelect} />
+                    ))}
+                    {hidden > 0 && !lower && (
+                        <button onClick={() => setShowAll(true)}
+                            className="w-full text-[9px] text-slate-600 hover:text-accent py-1 transition-colors pl-9">
+                            + {hidden} more
+                        </button>
+                    )}
+                </div>
+            )}
         </div>
     )
 }

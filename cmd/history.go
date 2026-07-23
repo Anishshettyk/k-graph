@@ -21,8 +21,8 @@ var historyCmd = &cobra.Command{
 	Short: "Show rollout history for a Deployment or StatefulSet",
 	Long: `Lists all ReplicaSets owned by a Deployment (newest first) with replica
 counts and container images. For StatefulSets shows the current revision info.`,
-	Args:  cobra.ExactArgs(1),
-	RunE:  runHistory,
+	Args: cobra.ExactArgs(1),
+	RunE: runHistory,
 }
 
 func init() {

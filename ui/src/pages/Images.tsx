@@ -7,9 +7,9 @@ import { useStore } from '../store/useStore'
 import type { ImageInfo, ImageRisk } from '../types/api'
 
 const RISK_META: Record<ImageRisk, { label: string; cls: string }> = {
-    'latest-tag':   { label: ':latest', cls: 'bg-red-950/40 text-red-400 border-red-900/40' },
-    'no-tag':       { label: 'no tag',  cls: 'bg-amber-950/40 text-amber-400 border-amber-900/40' },
-    'unknown-reg':  { label: 'unknown registry', cls: 'bg-violet-950/40 text-violet-400 border-violet-900/40' },
+    'latest-tag': { label: ':latest', cls: 'bg-red-950/40 text-red-400 border-red-900/40' },
+    'no-tag': { label: 'no tag', cls: 'bg-amber-950/40 text-amber-400 border-amber-900/40' },
+    'unknown-reg': { label: 'unknown registry', cls: 'bg-violet-950/40 text-violet-400 border-violet-900/40' },
 }
 
 function parseTag(_image: string, tag: string): { label: string; safe: boolean } {
@@ -43,7 +43,7 @@ export function Images() {
     )
 
     const risky = images.filter(i => i.risks.length > 0)
-    const safe  = images.filter(i => i.risks.length === 0)
+    const safe = images.filter(i => i.risks.length === 0)
 
     return (
         <div className="flex-1 overflow-y-auto p-6 space-y-5">

@@ -6,6 +6,7 @@ package collector
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -67,22 +68,40 @@ func NewWithClient(client kubernetes.Interface) *Collector {
 // as a graph.Resources snapshot. Listing is best-effort: if a resource type
 // cannot be listed (e.g. RBAC denies Secrets), that type is skipped rather than
 // failing the whole collection. An error is only returned if nothing could be
-// listed at all (typically an auth/connectivity failure).
+// Collect fetches all supported resource types in parallel and returns them as a
+// typed snapshot. Best-effort: if individual list calls fail (RBAC, not installed,
+// etc.) those fields are left empty and the error is only returned when ALL calls
+// fail.
 func (c *Collector) Collect(ctx context.Context) (graph.Resources, error) {
-	var res graph.Resources
+	var (
+		res      graph.Resources
+		mu       sync.Mutex
+		wg       sync.WaitGroup
+		firstErr error
+		ok       int
+	)
+
 	opts := metav1.ListOptions{}
 	all := metav1.NamespaceAll
 
-	var firstErr error
-	ok := 0
+	// Each call writes to a distinct field of res so no field-level mutex needed;
+	// only the error/ok counters require synchronisation.
 	try := func(name string, list func() error) {
-		if err := list(); err != nil {
-			if firstErr == nil {
-				firstErr = fmt.Errorf("list %s: %w", name, err)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := list(); err != nil {
+				mu.Lock()
+				if firstErr == nil {
+					firstErr = fmt.Errorf("list %s: %w", name, err)
+				}
+				mu.Unlock()
+				return
 			}
-			return
-		}
-		ok++
+			mu.Lock()
+			ok++
+			mu.Unlock()
+		}()
 	}
 
 	try("deployments", func() error {
@@ -232,6 +251,8 @@ func (c *Collector) Collect(ctx context.Context) (graph.Resources, error) {
 		}
 		return err
 	})
+
+	wg.Wait()
 
 	if ok == 0 && firstErr != nil {
 		return res, firstErr

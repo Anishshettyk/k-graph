@@ -17,9 +17,9 @@ import (
 type ImageRisk string
 
 const (
-	RiskLatestTag   ImageRisk = "latest-tag"   // image:latest — unpinned
-	RiskNoTag       ImageRisk = "no-tag"        // image with no tag at all
-	RiskUnknownReg  ImageRisk = "unknown-reg"   // not a known public/private registry
+	RiskLatestTag  ImageRisk = "latest-tag"  // image:latest — unpinned
+	RiskNoTag      ImageRisk = "no-tag"      // image with no tag at all
+	RiskUnknownReg ImageRisk = "unknown-reg" // not a known public/private registry
 )
 
 type ImageWorkload struct {
@@ -29,13 +29,13 @@ type ImageWorkload struct {
 }
 
 type ImageInfo struct {
-	Image       string          `json:"image"`
-	Registry    string          `json:"registry"`
-	Repository  string          `json:"repository"`
-	Tag         string          `json:"tag"`
-	Risks       []ImageRisk     `json:"risks"`
-	Workloads   []ImageWorkload `json:"workloads"`
-	PodCount    int             `json:"podCount"`
+	Image      string          `json:"image"`
+	Registry   string          `json:"registry"`
+	Repository string          `json:"repository"`
+	Tag        string          `json:"tag"`
+	Risks      []ImageRisk     `json:"risks"`
+	Workloads  []ImageWorkload `json:"workloads"`
+	PodCount   int             `json:"podCount"`
 }
 
 type ImagesResponse struct {
@@ -43,9 +43,9 @@ type ImagesResponse struct {
 	Namespace string      `json:"namespace"`
 	Images    []ImageInfo `json:"images"`
 	// summary
-	Total       int `json:"total"`
-	WithRisks   int `json:"withRisks"`
-	LatestTags  int `json:"latestTags"`
+	Total      int `json:"total"`
+	WithRisks  int `json:"withRisks"`
+	LatestTags int `json:"latestTags"`
 }
 
 // Known registries — anything else is "unknown"

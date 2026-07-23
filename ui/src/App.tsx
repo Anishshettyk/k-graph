@@ -17,15 +17,15 @@ export default function App() {
         <div className="flex flex-col h-full overflow-hidden bg-space-950">
             <TopBar />
             <main className="flex-1 overflow-hidden flex">
-                {page === 'explorer'     && <Explorer />}
-                {page === 'doctor'       && <Doctor />}
-                {page === 'orphan'       && <Orphan />}
-                {page === 'rbac'         && <RBAC />}
-                {page === 'events'       && <Events />}
-                {page === 'metrics'      && <Metrics />}
-                {page === 'images'       && <Images />}
+                {page === 'explorer' && <Explorer />}
+                {page === 'doctor' && <Doctor />}
+                {page === 'orphan' && <Orphan />}
+                {page === 'rbac' && <RBAC />}
+                {page === 'events' && <Events />}
+                {page === 'metrics' && <Metrics />}
+                {page === 'images' && <Images />}
                 {page === 'certificates' && <Certificates />}
-                {page === 'network'      && <NetworkTopology />}
+                {page === 'network' && <NetworkTopology />}
             </main>
         </div>
     )

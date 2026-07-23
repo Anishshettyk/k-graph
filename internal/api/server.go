@@ -10,11 +10,12 @@ import (
 // Every endpoint calls the same internal packages as the CLI commands.
 type Handler struct {
 	kubeconfig string
+	cache      *resourceCache
 }
 
 // New returns an API handler backed by the given kubeconfig path.
 func New(kubeconfig string) *Handler {
-	return &Handler{kubeconfig: kubeconfig}
+	return &Handler{kubeconfig: kubeconfig, cache: newResourceCache()}
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {

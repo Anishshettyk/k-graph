@@ -27,10 +27,10 @@ func init() {
 var imagesNamespace string
 
 var (
-	imgRiskStyle  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("214"))
-	imgOKStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("82"))
-	imgNameStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("39"))
-	imgDimStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
+	imgRiskStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("214"))
+	imgOKStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("82"))
+	imgNameStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("39"))
+	imgDimStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
 )
 
 func runImages(cmd *cobra.Command, args []string) error {

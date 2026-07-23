@@ -13,15 +13,15 @@ import { useStore } from '../store/useStore'
 type Page = 'explorer' | 'doctor' | 'orphan' | 'rbac' | 'events' | 'metrics' | 'images' | 'certificates' | 'network'
 
 const NAV_ITEMS: { id: Page; label: string; Icon: LucideIcon }[] = [
-    { id: 'explorer',     label: 'Explorer', Icon: Network },
-    { id: 'doctor',       label: 'Doctor',   Icon: Stethoscope },
-    { id: 'metrics',      label: 'Metrics',  Icon: BarChart3 },
-    { id: 'images',       label: 'Images',   Icon: Package },
-    { id: 'network',      label: 'Network',  Icon: Globe },
-    { id: 'certificates', label: 'Certs',    Icon: ShieldAlert },
-    { id: 'orphan',       label: 'Orphans',  Icon: Unlink },
-    { id: 'rbac',         label: 'RBAC',     Icon: Shield },
-    { id: 'events',       label: 'Events',   Icon: Zap },
+    { id: 'explorer', label: 'Explorer', Icon: Network },
+    { id: 'doctor', label: 'Doctor', Icon: Stethoscope },
+    { id: 'metrics', label: 'Metrics', Icon: BarChart3 },
+    { id: 'images', label: 'Images', Icon: Package },
+    { id: 'network', label: 'Network', Icon: Globe },
+    { id: 'certificates', label: 'Certs', Icon: ShieldAlert },
+    { id: 'orphan', label: 'Orphans', Icon: Unlink },
+    { id: 'rbac', label: 'RBAC', Icon: Shield },
+    { id: 'events', label: 'Events', Icon: Zap },
 ]
 
 export function TopBar() {

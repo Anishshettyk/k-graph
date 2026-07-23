@@ -29,10 +29,10 @@ func init() {
 var rsNamespace string
 
 var (
-	rsWasteStyle  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("214"))
-	rsUnderStyle  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("196"))
-	rsOKStyle2    = lipgloss.NewStyle().Foreground(lipgloss.Color("82"))
-	rsDimStyle2   = lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
+	rsWasteStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("214"))
+	rsUnderStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("196"))
+	rsOKStyle2   = lipgloss.NewStyle().Foreground(lipgloss.Color("82"))
+	rsDimStyle2  = lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
 )
 
 func runRightsizing(cmd *cobra.Command, args []string) error {

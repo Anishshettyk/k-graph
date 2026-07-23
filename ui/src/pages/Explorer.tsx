@@ -92,6 +92,14 @@ export function Explorer() {
         staleTime: 30_000,
     })
 
+    const handleRefresh = useCallback(() => {
+        // Pass refresh=true so the server bypasses its cache and does a fresh sweep
+        queryClient.fetchQuery({
+            queryKey: ['graph', context, namespace],
+            queryFn: () => { setLastRefresh(new Date()); setRelTime('just now'); return api.graph(context, namespace, true) },
+        })
+    }, [context, namespace, queryClient])
+
     if (!context) {
         return (
             <div className="flex-1 flex items-center justify-center text-slate-600 text-sm">
@@ -131,6 +139,7 @@ export function Explorer() {
 
     const data = graphQuery.data!
     const stale = (Date.now() - lastRefresh.getTime()) > 120_000  // amber after 2m
+    const truncated = data.truncated && data.total > data.nodes.length
 
     return (
         <div className="flex-1 flex overflow-hidden">
@@ -165,6 +174,16 @@ export function Explorer() {
                     onFilterKind={setFilterKind}
                 />
             </div>
+
+            {/* Large-cluster truncation warning */}
+            {truncated && (
+                <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-20">
+                    <div className="flex items-center gap-2 px-3 py-2 rounded-full bg-amber-950/90 backdrop-blur border border-amber-800/60 text-amber-400 text-[11px] shadow-lg">
+                        <Activity className="w-3.5 h-3.5 flex-shrink-0" />
+                        Showing {data.nodes.length} of {data.total} resources — use namespace filter or kind filter to narrow
+                    </div>
+                </div>
+            )}
 
             {/* Graph */}
             <div className="flex-1 relative overflow-hidden">
@@ -215,7 +234,7 @@ export function Explorer() {
                     {/* Refresh / live toggle */}
                     <div className="flex items-center gap-1 bg-space-900/90 backdrop-blur border border-space-700 rounded-full px-1 py-0.5">
                         <button
-                            onClick={() => { graphQuery.refetch(); setLastRefresh(new Date()) }}
+                            onClick={() => { handleRefresh(); setLastRefresh(new Date()) }}
                             className="p-1 text-slate-600 hover:text-accent transition-colors"
                         >
                             <RefreshCw className={`w-3 h-3 ${graphQuery.isFetching ? 'animate-spin text-accent' : ''}`} />

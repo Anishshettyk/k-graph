@@ -74,7 +74,13 @@ type GraphResponse struct {
 	Namespace string     `json:"namespace"`
 	Nodes     []NodeInfo `json:"nodes"`
 	Edges     []EdgeInfo `json:"edges"`
+	Total     int        `json:"total"`     // total nodes before any limit
+	Truncated bool       `json:"truncated"` // true when maxNodes cap was applied
 }
+
+// maxGraphNodes is the default cap for /api/graph responses.
+// Clients can override with ?maxNodes=N. 0 = unlimited.
+const defaultMaxGraphNodes = 800
 
 func (h *Handler) handleGraph(w http.ResponseWriter, r *http.Request) {
 	ctx, ctxName, ns, res, err := h.collect(r)
@@ -83,22 +89,49 @@ func (h *Handler) handleGraph(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_ = ctx
+	maxNodes := defaultMaxGraphNodes
+	if v := r.URL.Query().Get("maxNodes"); v != "" {
+		var n int
+		if _, err2 := fmt.Sscanf(v, "%d", &n); err2 == nil && n > 0 {
+			maxNodes = n
+		}
+	}
 	g := graph.Build(*res)
-	writeJSON(w, buildGraphResponse(g, ctxName, ns))
+	writeJSON(w, buildGraphResponse(g, ctxName, ns, maxNodes))
 }
 
-func buildGraphResponse(g *graph.Graph, ctxName, ns string) GraphResponse {
+func buildGraphResponse(g *graph.Graph, ctxName, ns string, maxNodes int) GraphResponse {
 	resp := GraphResponse{Context: ctxName, Namespace: ns}
-	for _, n := range g.Nodes() {
+	allNodes := g.Nodes()
+	filtered := allNodes[:0:0] // same backing array, 0 length
+	for _, n := range allNodes {
 		if ns != "" && n.Namespace != ns && n.Namespace != "" {
 			continue
 		}
+		filtered = append(filtered, n)
+	}
+	resp.Total = len(filtered)
+
+	// Apply cap — prioritise top-level workloads and network resources so
+	// the visible graph is still useful.
+	truncated := maxNodes > 0 && len(filtered) > maxNodes
+	if truncated {
+		filtered = filtered[:maxNodes]
+	}
+	resp.Truncated = truncated
+
+	// Build a set of visible UIDs for edge filtering
+	visibleUIDs := make(map[string]bool, len(filtered))
+	for _, n := range filtered {
+		visibleUIDs[string(n.UID)] = true
 		resp.Nodes = append(resp.Nodes, nodeToInfo(n))
 	}
 	for _, e := range g.Edges() {
-		resp.Edges = append(resp.Edges, EdgeInfo{
-			From: string(e.From), To: string(e.To), Rel: string(e.Rel),
-		})
+		if visibleUIDs[string(e.From)] && visibleUIDs[string(e.To)] {
+			resp.Edges = append(resp.Edges, EdgeInfo{
+				From: string(e.From), To: string(e.To), Rel: string(e.Rel),
+			})
+		}
 	}
 	return resp
 }
@@ -840,10 +873,17 @@ func (h *Handler) collect(r *http.Request) (context.Context, string, string, *gr
 	q := r.URL.Query()
 	ctxName := q.Get("context")
 	ns := q.Get("namespace")
-	return h.collectWithCtx(r.Context(), ctxName, ns)
+	refresh := q.Get("refresh") == "true"
+	return h.collectOpts(r.Context(), ctxName, ns, refresh)
 }
 
 func (h *Handler) collectWithCtx(ctx context.Context, ctxName, ns string) (context.Context, string, string, *graph.Resources, error) {
+	return h.collectOpts(ctx, ctxName, ns, false)
+}
+
+// collectOpts resolves the kubeconfig context, checks the shared resource cache,
+// and only sweeps the cluster when the cache is cold or refresh is forced.
+func (h *Handler) collectOpts(ctx context.Context, ctxName, ns string, refresh bool) (context.Context, string, string, *graph.Resources, error) {
 	if ctxName == "" {
 		rules := clientcmd.NewDefaultClientConfigLoadingRules()
 		if h.kubeconfig != "" {
@@ -855,6 +895,16 @@ func (h *Handler) collectWithCtx(ctx context.Context, ctxName, ns string) (conte
 		}
 		ctxName = cfg.CurrentContext
 	}
+
+	// Cache hit — skip the 21-API sweep.
+	if !refresh {
+		if cached, ok := h.cache.get(ctxName); ok {
+			return ctx, ctxName, ns, cached, nil
+		}
+	} else {
+		h.cache.invalidate(ctxName)
+	}
+
 	c, err := collector.New(h.kubeconfig, ctxName)
 	if err != nil {
 		return ctx, ctxName, ns, nil, err
@@ -865,13 +915,23 @@ func (h *Handler) collectWithCtx(ctx context.Context, ctxName, ns string) (conte
 	if err != nil {
 		return ctx, ctxName, ns, nil, err
 	}
+	h.cache.set(ctxName, res)
 	return ctx, ctxName, ns, &res, nil
 }
 
 func findNode(g *graph.Graph, ref string) (*graph.Node, error) {
 	kind, name := parseResourceRef(ref)
 	for _, n := range g.Nodes() {
-		if strings.EqualFold(n.Kind, kind) && (strings.Contains(n.Name, name) || n.Name == name) {
+		// Exact match preferred; fall back to suffix match for generated names
+		// (e.g. "frontend-abc-xyz" matches "frontend-abc-xyz").
+		if strings.EqualFold(n.Kind, kind) && n.Name == name {
+			n := n
+			return &n, nil
+		}
+	}
+	// Second pass: prefix/substring match for truncated names
+	for _, n := range g.Nodes() {
+		if strings.EqualFold(n.Kind, kind) && strings.Contains(n.Name, name) {
 			n := n
 			return &n, nil
 		}

@@ -67,9 +67,9 @@ export function Certificates() {
 
     const groups: { sev: CertSeverity; label: string; items: CertInfo[] }[] = [
         { sev: 'critical', label: 'Critical / Expired', items: certs.filter(c => c.severity === 'critical') },
-        { sev: 'warning',  label: 'Expiring Soon (≤30d)', items: certs.filter(c => c.severity === 'warning') },
-        { sev: 'watch',    label: 'Watch (≤90d)',          items: certs.filter(c => c.severity === 'watch') },
-        { sev: 'ok',       label: 'Healthy',               items: certs.filter(c => c.severity === 'ok') },
+        { sev: 'warning', label: 'Expiring Soon (≤30d)', items: certs.filter(c => c.severity === 'warning') },
+        { sev: 'watch', label: 'Watch (≤90d)', items: certs.filter(c => c.severity === 'watch') },
+        { sev: 'ok', label: 'Healthy', items: certs.filter(c => c.severity === 'ok') },
     ]
 
     return (

@@ -30,10 +30,10 @@ func init() {
 var certsNamespace string
 
 var (
-	certCritStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("196"))
-	certWarnStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("214"))
+	certCritStyle  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("196"))
+	certWarnStyle  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("214"))
 	certWatchStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("220"))
-	certOKStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("82"))
+	certOKStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("82"))
 	certLabelStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
 )
 

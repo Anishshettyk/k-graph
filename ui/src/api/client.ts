@@ -25,8 +25,8 @@ export const api = {
     contexts: () =>
         get<ContextsResponse>('/contexts'),
 
-    graph: (context: string, namespace: string) =>
-        get<GraphResponse>('/graph', { context, namespace }),
+    graph: (context: string, namespace: string, refresh = false) =>
+        get<GraphResponse>('/graph', { context, namespace, ...(refresh ? { refresh: 'true' } : {}) }),
 
     deps: (context: string, namespace: string, resource: string) =>
         get<TreeResponse>('/deps', { context, namespace, resource }),

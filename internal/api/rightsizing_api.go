@@ -18,31 +18,31 @@ import (
 type RSizingSeverity string
 
 const (
-	RSWaste     RSizingSeverity = "waste"      // using <20% of request → over-provisioned
-	RSUnderReq  RSizingSeverity = "under-req"  // usage near or above request → may throttle
-	RSOK        RSizingSeverity = "ok"
+	RSWaste    RSizingSeverity = "waste"     // using <20% of request → over-provisioned
+	RSUnderReq RSizingSeverity = "under-req" // usage near or above request → may throttle
+	RSOK       RSizingSeverity = "ok"
 )
 
 type ContainerSizing struct {
-	Name          string          `json:"name"`
-	Resource      string          `json:"resource"` // "cpu" | "memory"
-	UsageMilli    int64           `json:"usageMilli,omitempty"`
-	UsageBytes    int64           `json:"usageBytes,omitempty"`
-	RequestMilli  int64           `json:"requestMilli,omitempty"`
-	RequestBytes  int64           `json:"requestBytes,omitempty"`
-	LimitMilli    int64           `json:"limitMilli,omitempty"`
-	LimitBytes    int64           `json:"limitBytes,omitempty"`
-	UsagePct      float64         `json:"usagePct"`  // % of request
-	Severity      RSizingSeverity `json:"severity"`
-	Recommendation string         `json:"recommendation"`
+	Name           string          `json:"name"`
+	Resource       string          `json:"resource"` // "cpu" | "memory"
+	UsageMilli     int64           `json:"usageMilli,omitempty"`
+	UsageBytes     int64           `json:"usageBytes,omitempty"`
+	RequestMilli   int64           `json:"requestMilli,omitempty"`
+	RequestBytes   int64           `json:"requestBytes,omitempty"`
+	LimitMilli     int64           `json:"limitMilli,omitempty"`
+	LimitBytes     int64           `json:"limitBytes,omitempty"`
+	UsagePct       float64         `json:"usagePct"` // % of request
+	Severity       RSizingSeverity `json:"severity"`
+	Recommendation string          `json:"recommendation"`
 }
 
 type PodSizing struct {
-	Namespace  string            `json:"namespace"`
-	Name       string            `json:"name"`
-	CPU        ContainerSizing   `json:"cpu"`
-	Memory     ContainerSizing   `json:"memory"`
-	Workload   string            `json:"workload,omitempty"` // owning workload name
+	Namespace string          `json:"namespace"`
+	Name      string          `json:"name"`
+	CPU       ContainerSizing `json:"cpu"`
+	Memory    ContainerSizing `json:"memory"`
+	Workload  string          `json:"workload,omitempty"` // owning workload name
 }
 
 type RightsizingResponse struct {
@@ -57,12 +57,12 @@ type RightsizingResponse struct {
 }
 
 type NSResourceSummary struct {
-	Namespace    string  `json:"namespace"`
-	CPUReqMilli  int64   `json:"cpuRequestMilli"`
-	CPUUsedMilli int64   `json:"cpuUsedMilli"`
-	MemReqBytes  int64   `json:"memRequestBytes"`
-	MemUsedBytes int64   `json:"memUsedBytes"`
-	PodCount     int     `json:"podCount"`
+	Namespace    string `json:"namespace"`
+	CPUReqMilli  int64  `json:"cpuRequestMilli"`
+	CPUUsedMilli int64  `json:"cpuUsedMilli"`
+	MemReqBytes  int64  `json:"memRequestBytes"`
+	MemUsedBytes int64  `json:"memUsedBytes"`
+	PodCount     int    `json:"podCount"`
 }
 
 func (h *Handler) handleRightsizing(w http.ResponseWriter, r *http.Request) {
