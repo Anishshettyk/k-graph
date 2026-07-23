@@ -271,83 +271,117 @@ function ErrorMsg({ message }: { message: string }) {
 // ─── History Tab ─────────────────────────────────────────────────────────────
 
 function HistoryTab({ query }: { query: ReturnType<typeof useQuery<HistoryResponse>> }) {
+    const [selected, setSelected] = useState<Set<string>>(new Set())
+    const [showDiff, setShowDiff] = useState(false)
+
     if (query.isLoading) return <Spinner />
     if (query.error) return <ErrorMsg message={(query.error as Error).message} />
     if (!query.data || !query.data.revisions?.length) {
-        return (
-            <div className="text-center py-8 text-slate-600 text-xs">
-                No rollout history found
-            </div>
-        )
+        return <div className="text-center py-8 text-slate-600 text-xs">No rollout history found</div>
     }
 
     const revisions = query.data.revisions
     const total = revisions.length
 
+    const toggleSelect = (name: string) => {
+        setShowDiff(false)
+        setSelected(prev => {
+            const next = new Set(prev)
+            if (next.has(name)) { next.delete(name); return next }
+            if (next.size >= 2) {
+                // replace oldest selection
+                const [first] = next
+                next.delete(first)
+            }
+            next.add(name)
+            return next
+        })
+    }
+
+    const selectedRevs = revisions.filter(r => selected.has(r.name))
+    const canCompare = selectedRevs.length === 2
+
+    if (showDiff && canCompare) {
+        // older = higher index (lower revNum); newer = lower index (higher revNum)
+        const idxA = revisions.findIndex(r => r.name === selectedRevs[0].name)
+        const idxB = revisions.findIndex(r => r.name === selectedRevs[1].name)
+        const [newer, older] = idxA < idxB ? [selectedRevs[0], selectedRevs[1]] : [selectedRevs[1], selectedRevs[0]]
+        return <RevisionDiff newer={newer} older={older} total={total} revisions={revisions}
+            onBack={() => setShowDiff(false)} />
+    }
+
     return (
         <div className="space-y-2">
-            <div className="text-[10px] font-semibold uppercase tracking-widest text-slate-500 mb-3 flex items-center gap-2">
-                <Clock className="w-3.5 h-3.5" />
-                {total} revision{total !== 1 ? 's' : ''} — newest first
+            <div className="flex items-center gap-2 mb-3">
+                <Clock className="w-3.5 h-3.5 text-slate-500" />
+                <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">
+                    {total} revision{total !== 1 ? 's' : ''} — newest first
+                </span>
+                {canCompare && (
+                    <button onClick={() => setShowDiff(true)}
+                        className="ml-auto flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded border border-accent/40 bg-accent/10 text-accent hover:bg-accent/20 transition-colors">
+                        <CheckCircle2 className="w-3 h-3" /> Compare
+                    </button>
+                )}
+                {selected.size === 1 && (
+                    <span className="ml-auto text-[9px] text-slate-600">Select one more to compare</span>
+                )}
+                {selected.size === 0 && total > 1 && (
+                    <span className="ml-auto text-[9px] text-slate-600">Select up to 2 to compare</span>
+                )}
             </div>
+
             {revisions.map((rev, i) => {
                 const revNum = total - i
                 const healthy = rev.readyReplicas === rev.desiredReplicas && rev.desiredReplicas > 0
                 const idle    = rev.replicas === 0
+                const isSelected = selected.has(rev.name)
                 return (
-                    <div key={rev.name} className={clsx(
-                        'rounded-lg border p-3 space-y-2',
-                        rev.isCurrent
-                            ? 'border-accent/40 bg-accent/5'
-                            : 'border-space-700 bg-space-850'
-                    )}>
-                        {/* Rev header */}
+                    <div key={rev.name}
+                        onClick={() => toggleSelect(rev.name)}
+                        className={clsx(
+                            'rounded-lg border p-3 space-y-2 cursor-pointer transition-all',
+                            rev.isCurrent && !isSelected ? 'border-accent/40 bg-accent/5 hover:bg-accent/10' :
+                            isSelected ? 'border-violet-500/60 bg-violet-950/20 ring-1 ring-violet-500/30' :
+                            'border-space-700 bg-space-850 hover:border-space-600'
+                        )}>
                         <div className="flex items-center gap-2">
+                            {/* Selection indicator */}
+                            <div className={clsx(
+                                'w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center transition-all',
+                                isSelected ? 'border-violet-500 bg-violet-500' : 'border-space-600'
+                            )}>
+                                {isSelected && <span className="text-[8px] text-white font-bold">✓</span>}
+                            </div>
                             <span className={clsx(
                                 'text-[9px] font-bold uppercase px-1.5 py-0.5 rounded border flex-shrink-0',
-                                rev.isCurrent
-                                    ? 'text-accent border-accent/40 bg-accent/10'
-                                    : 'text-slate-600 border-space-700 bg-space-800'
-                            )}>
-                                rev {revNum}
-                            </span>
-                            {rev.isCurrent && (
-                                <span className="text-[9px] font-bold text-emerald-400">▶ CURRENT</span>
-                            )}
+                                rev.isCurrent ? 'text-accent border-accent/40 bg-accent/10' : 'text-slate-600 border-space-700 bg-space-800'
+                            )}>rev {revNum}</span>
+                            {rev.isCurrent && <span className="text-[9px] font-bold text-emerald-400">▶ CURRENT</span>}
                             <span className="text-[10px] text-slate-600 font-mono ml-auto flex-shrink-0">
                                 {new Date(rev.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
                             </span>
                         </div>
-
-                        {/* Replicas bar */}
                         {!idle && (
                             <div className="flex items-center gap-2">
                                 <div className="flex gap-0.5 flex-1">
                                     {Array.from({ length: rev.desiredReplicas }).map((_, j) => (
-                                        <div key={j} className={clsx(
-                                            'h-2 flex-1 rounded-sm',
-                                            j < rev.readyReplicas ? 'bg-emerald-500' : 'bg-red-700/60'
-                                        )} />
+                                        <div key={j} className={clsx('h-1.5 flex-1 rounded-sm',
+                                            j < rev.readyReplicas ? 'bg-emerald-500' : 'bg-red-700/60')} />
                                     ))}
                                 </div>
                                 <span className={clsx('text-[10px] font-mono flex-shrink-0', healthy ? 'text-emerald-400' : 'text-red-400')}>
-                                    {rev.readyReplicas}/{rev.desiredReplicas} ready
+                                    {rev.readyReplicas}/{rev.desiredReplicas}
                                 </span>
                             </div>
                         )}
-                        {idle && (
-                            <div className="text-[10px] text-slate-600">0 replicas — scaled down</div>
-                        )}
-
-                        {/* Images */}
+                        {idle && <div className="text-[10px] text-slate-600">scaled down</div>}
                         {(rev.images ?? []).map(img => (
                             <div key={img} className="flex items-center gap-1.5 text-[10px]">
                                 <ArrowRight className="w-3 h-3 text-slate-700 flex-shrink-0" />
                                 <span className="font-mono text-slate-500 truncate">{img}</span>
                             </div>
                         ))}
-
-                        {/* RS name */}
                         <div className="text-[9px] font-mono text-slate-700 truncate">{rev.name}</div>
                     </div>
                 )
@@ -356,5 +390,125 @@ function HistoryTab({ query }: { query: ReturnType<typeof useQuery<HistoryRespon
     )
 }
 
+function RevisionDiff({ newer, older, total, revisions, onBack }: {
+    newer: import('../types/api').RSRevision
+    older: import('../types/api').RSRevision
+    total: number
+    revisions: import('../types/api').RSRevision[]
+    onBack: () => void
+}) {
+    const newerIdx = revisions.findIndex(r => r.name === newer.name)
+    const olderIdx = revisions.findIndex(r => r.name === older.name)
+    const newerRev = total - newerIdx
+    const olderRev = total - olderIdx
+
+    const newerImgs = new Set(newer.images ?? [])
+    const olderImgs = new Set(older.images ?? [])
+    const addedImgs   = [...newerImgs].filter(i => !olderImgs.has(i))
+    const removedImgs = [...olderImgs].filter(i => !newerImgs.has(i))
+    const sameImgs    = [...newerImgs].filter(i => olderImgs.has(i))
+
+    const daysDiff = Math.round(
+        (new Date(newer.createdAt).getTime() - new Date(older.createdAt).getTime()) / 86400000
+    )
+
+    return (
+        <div className="space-y-3">
+            <div className="flex items-center gap-2">
+                <button onClick={onBack} className="text-[10px] text-slate-500 hover:text-accent flex items-center gap-1">
+                    ← back
+                </button>
+                <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-500 ml-1">
+                    Comparing rev {olderRev} → rev {newerRev}
+                </span>
+            </div>
+
+            {/* Side-by-side header */}
+            <div className="grid grid-cols-2 gap-2">
+                <div className="rounded-lg border border-slate-700 bg-space-850 p-2 text-center">
+                    <div className="text-[9px] text-slate-600 mb-0.5">OLDER</div>
+                    <div className="text-[10px] font-bold text-slate-400">rev {olderRev}</div>
+                    <div className="text-[9px] text-slate-600 font-mono">{new Date(older.createdAt).toLocaleDateString()}</div>
+                </div>
+                <div className="rounded-lg border border-accent/40 bg-accent/5 p-2 text-center">
+                    <div className="text-[9px] text-accent mb-0.5">NEWER</div>
+                    <div className="text-[10px] font-bold text-accent">rev {newerRev}</div>
+                    <div className="text-[9px] text-slate-600 font-mono">{new Date(newer.createdAt).toLocaleDateString()}</div>
+                </div>
+            </div>
+
+            {/* Time gap */}
+            <div className="text-center text-[10px] text-slate-600">
+                {Math.abs(daysDiff)} day{Math.abs(daysDiff) !== 1 ? 's' : ''} between revisions
+            </div>
+
+            {/* Replicas diff */}
+            {older.desiredReplicas !== newer.desiredReplicas && (
+                <DiffRow label="Replicas" oldVal={`${older.desiredReplicas}`} newVal={`${newer.desiredReplicas}`} />
+            )}
+            {older.desiredReplicas === newer.desiredReplicas && (
+                <div className="text-[10px] text-slate-600 flex items-center gap-1.5">
+                    <CheckCircle2 className="w-3 h-3 text-slate-600" />
+                    Replicas unchanged ({newer.desiredReplicas})
+                </div>
+            )}
+
+            {/* Image diffs */}
+            {addedImgs.length > 0 && (
+                <div className="space-y-1">
+                    <div className="text-[9px] font-bold uppercase tracking-widest text-emerald-500">+ Added images</div>
+                    {addedImgs.map(img => (
+                        <div key={img} className="text-[10px] font-mono text-emerald-400 bg-emerald-950/20 rounded px-2 py-1 border border-emerald-900/30">
+                            + {img}
+                        </div>
+                    ))}
+                </div>
+            )}
+            {removedImgs.length > 0 && (
+                <div className="space-y-1">
+                    <div className="text-[9px] font-bold uppercase tracking-widest text-red-400">- Removed images</div>
+                    {removedImgs.map(img => (
+                        <div key={img} className="text-[10px] font-mono text-red-400 bg-red-950/20 rounded px-2 py-1 border border-red-900/30 line-through opacity-70">
+                            - {img}
+                        </div>
+                    ))}
+                </div>
+            )}
+            {sameImgs.length > 0 && (
+                <div className="space-y-1">
+                    <div className="text-[9px] font-semibold text-slate-600">Unchanged images</div>
+                    {sameImgs.map(img => (
+                        <div key={img} className="text-[10px] font-mono text-slate-600 px-2 py-0.5">
+                            = {img}
+                        </div>
+                    ))}
+                </div>
+            )}
+
+            {/* RS names */}
+            <div className="grid grid-cols-2 gap-2 pt-1 border-t border-space-700">
+                <div className="text-[9px] font-mono text-slate-700 truncate">{older.name}</div>
+                <div className="text-[9px] font-mono text-slate-600 truncate">{newer.name}</div>
+            </div>
+        </div>
+    )
+}
+
+function DiffRow({ label, oldVal, newVal }: { label: string; oldVal: string; newVal: string }) {
+    return (
+        <div className="space-y-1">
+            <div className="text-[9px] font-bold uppercase tracking-widest text-amber-500">{label} changed</div>
+            <div className="grid grid-cols-2 gap-2">
+                <div className="text-[10px] font-mono text-red-400 bg-red-950/20 rounded px-2 py-1 border border-red-900/30 line-through opacity-70">
+                    {oldVal}
+                </div>
+                <div className="text-[10px] font-mono text-emerald-400 bg-emerald-950/20 rounded px-2 py-1 border border-emerald-900/30">
+                    {newVal}
+                </div>
+            </div>
+        </div>
+    )
+}
+
 // suppress unused import warnings
-void ChevronDown; void RefreshCw; void Cpu; void HardDrive; void CheckCircle2; void XCircle
+void ChevronDown; void RefreshCw; void Cpu; void HardDrive; void XCircle

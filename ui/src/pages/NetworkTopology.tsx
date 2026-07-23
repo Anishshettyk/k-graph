@@ -1,32 +1,320 @@
-import { useState, useMemo } from 'react'
+import { useMemo, useCallback, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Loader2, RefreshCw, Network, Shield, Globe, ArrowRight } from 'lucide-react'
+import {
+    ReactFlow, Controls, MiniMap, Background, BackgroundVariant,
+    useNodesState, useEdgesState, ReactFlowProvider,
+    type Node, type Edge,
+    Handle, Position, MarkerType,
+} from '@xyflow/react'
+import dagre from 'dagre'
+import { Loader2, Globe, Network, Shield, RefreshCw, Info } from 'lucide-react'
 import clsx from 'clsx'
+import '@xyflow/react/dist/style.css'
 import { api } from '../api/client'
 import { useStore } from '../store/useStore'
-import type { NodeInfo, EdgeInfo } from '../types/api'
+import type { NodeInfo } from '../types/api'
 
-// Network-relevant kinds for topology view
-const KIND_COLOR: Record<string, string> = {
-    Ingress: '#f472b6',       // pink
-    Service: '#60a5fa',       // blue
-    NetworkPolicy: '#f59e0b', // amber
-    Pod: '#34d399',           // green
-    Deployment: '#a78bfa',    // violet
+// ─── Colour palette ──────────────────────────────────────────────────────────
+const C = {
+    internet:  { bg: '#0f172a', border: '#38bdf8', glow: '#38bdf8', text: '#7dd3fc' },
+    ingress:   { bg: '#1e0a1e', border: '#e879f9', glow: '#d946ef', text: '#f0abfc' },
+    service:   { bg: '#0a1628', border: '#3b82f6', glow: '#2563eb', text: '#93c5fd' },
+    pod_ok:    { bg: '#071a10', border: '#22c55e', glow: '#16a34a', text: '#86efac' },
+    pod_bad:   { bg: '#1a0707', border: '#ef4444', glow: '#dc2626', text: '#fca5a5' },
+    policy:    { bg: '#1a1000', border: '#f59e0b', glow: '#d97706', text: '#fcd34d' },
 }
 
-const KIND_ICON: Record<string, React.ReactNode> = {
-    Ingress:       <Globe className="w-3 h-3" />,
-    Service:       <Network className="w-3 h-3" />,
-    NetworkPolicy: <Shield className="w-3 h-3" />,
+// ─── Custom node components ───────────────────────────────────────────────────
+
+function glowStyle(color: string) {
+    return { boxShadow: `0 0 14px ${color}44, 0 0 4px ${color}22, inset 0 0 12px ${color}11` }
 }
 
-interface FlowNode { node: NodeInfo; children: FlowNode[] }
-void (undefined as unknown as FlowNode)
+function NodeBase({ c, icon, title, subtitle, badge, handles = 'both' }: {
+    c: typeof C.ingress; icon: React.ReactNode; title: string
+    subtitle?: string; badge?: string; handles?: 'both' | 'left' | 'right' | 'none'
+}) {
+    return (
+        <div className="relative rounded-xl border px-3 py-2 min-w-[120px] max-w-[180px] select-none"
+            style={{ backgroundColor: c.bg, borderColor: c.border, ...glowStyle(c.glow) }}>
+            {(handles === 'both' || handles === 'left') && (
+                <Handle type="target" position={Position.Left}
+                    style={{ background: c.border, border: `2px solid ${c.glow}`, width: 8, height: 8 }} />
+            )}
+            <div className="flex items-center gap-1.5">
+                <span style={{ color: c.text }}>{icon}</span>
+                <span className="text-[11px] font-semibold truncate" style={{ color: c.text }}>{title}</span>
+            </div>
+            {subtitle && <div className="text-[9px] font-mono opacity-60 mt-0.5 truncate" style={{ color: c.text }}>{subtitle}</div>}
+            {badge && (
+                <div className="absolute -top-2 -right-2 text-[8px] font-bold px-1.5 py-0.5 rounded-full border"
+                    style={{ backgroundColor: c.bg, borderColor: c.border, color: c.text }}>
+                    {badge}
+                </div>
+            )}
+            {(handles === 'both' || handles === 'right') && (
+                <Handle type="source" position={Position.Right}
+                    style={{ background: c.border, border: `2px solid ${c.glow}`, width: 8, height: 8 }} />
+            )}
+        </div>
+    )
+}
 
+function InternetNode() {
+    return (
+        <NodeBase c={C.internet} icon={<Globe className="w-3.5 h-3.5" />}
+            title="Internet" subtitle="external traffic" handles="right" />
+    )
+}
+function IngressNode({ data }: { data: { node: NodeInfo } }) {
+    const n = data.node
+    return (
+        <NodeBase c={C.ingress} icon={<Globe className="w-3.5 h-3.5" />}
+            title={n.name} subtitle={n.namespace} badge="INGRESS" handles="both" />
+    )
+}
+function ServiceNode({ data }: { data: { node: NodeInfo } }) {
+    const n = data.node
+    return (
+        <NodeBase c={C.service} icon={<Network className="w-3.5 h-3.5" />}
+            title={n.name} subtitle={n.fields?.type ?? n.namespace} badge="SVC" handles="both" />
+    )
+}
+function PodNode({ data }: { data: { node: NodeInfo } }) {
+    const n = data.node
+    const c = n.healthy ? C.pod_ok : C.pod_bad
+    return (
+        <div className="relative rounded-full border px-3 py-2 min-w-[100px] max-w-[160px] select-none text-center"
+            style={{ backgroundColor: c.bg, borderColor: c.border, ...glowStyle(c.glow) }}>
+            <Handle type="target" position={Position.Left}
+                style={{ background: c.border, border: `2px solid ${c.glow}`, width: 7, height: 7 }} />
+            <div className="flex items-center justify-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: c.border }} />
+                <span className="text-[10px] font-mono truncate" style={{ color: c.text }}>{n.name.split('-').slice(-2).join('-')}</span>
+            </div>
+            {!n.healthy && n.reason && (
+                <div className="text-[8px] opacity-70 mt-0.5 truncate" style={{ color: c.text }}>{n.reason}</div>
+            )}
+        </div>
+    )
+}
+function PolicyNode({ data }: { data: { node: NodeInfo } }) {
+    const n = data.node
+    return (
+        <NodeBase c={C.policy} icon={<Shield className="w-3.5 h-3.5" />}
+            title={n.name} subtitle={n.namespace} badge="POLICY" handles="right" />
+    )
+}
+
+const nodeTypes = {
+    internet: InternetNode,
+    ingress:  IngressNode,
+    service:  ServiceNode,
+    pod:      PodNode,
+    policy:   PolicyNode,
+}
+
+// ─── Dagre layout ─────────────────────────────────────────────────────────────
+function layout(nodes: Node[], edges: Edge[], dir = 'LR'): { nodes: Node[]; edges: Edge[] } {
+    const g = new dagre.graphlib.Graph()
+    g.setDefaultEdgeLabel(() => ({}))
+    g.setGraph({ rankdir: dir, nodesep: 50, ranksep: 120, edgesep: 20 })
+    nodes.forEach(n => g.setNode(n.id, { width: 190, height: 60 }))
+    edges.forEach(e => g.setEdge(e.source, e.target))
+    dagre.layout(g)
+    return {
+        nodes: nodes.map(n => {
+            const pos = g.node(n.id)
+            return { ...n, position: { x: pos.x - 95, y: pos.y - 30 } }
+        }),
+        edges,
+    }
+}
+
+// ─── Main canvas ──────────────────────────────────────────────────────────────
+function NetworkCanvas({ graphData }: { graphData: { nodes: NodeInfo[]; edges: { from: string; to: string; rel: string }[] } }) {
+    const [selectedNode, setSelectedNode] = useState<NodeInfo | null>(null)
+
+    const { rfNodes, rfEdges } = useMemo(() => {
+        const nodeByUID: Record<string, NodeInfo> = {}
+        for (const n of graphData.nodes) nodeByUID[n.uid] = n
+
+        const ingresses  = graphData.nodes.filter(n => n.kind === 'Ingress')
+        const services   = graphData.nodes.filter(n => n.kind === 'Service')
+        const policies   = graphData.nodes.filter(n => n.kind === 'NetworkPolicy')
+
+        const rfNodes: Node[] = []
+        const rfEdges: Edge[] = []
+
+        const edgeStyle = (color: string) => ({
+            stroke: color, strokeWidth: 2,
+        })
+
+        // Add services and pods reachable from services
+        const reachableServiceUIDs = new Set<string>()
+        const reachablePodUIDs = new Set<string>()
+
+        for (const svc of services) {
+            reachableServiceUIDs.add(svc.uid)
+            for (const e of graphData.edges) {
+                if (e.from === svc.uid && e.rel === 'selects') {
+                    reachablePodUIDs.add(e.to)
+                }
+            }
+        }
+
+        // Internet node (only if there are ingresses)
+        if (ingresses.length > 0) {
+            rfNodes.push({ id: '__internet__', type: 'internet', position: { x: 0, y: 0 }, data: {} })
+            for (const ing of ingresses) {
+                rfEdges.push({
+                    id: `internet-${ing.uid}`,
+                    source: '__internet__', target: ing.uid,
+                    animated: true,
+                    style: edgeStyle(C.ingress.border),
+                    markerEnd: { type: MarkerType.ArrowClosed, color: C.ingress.border },
+                    label: 'HTTP/S',
+                    labelStyle: { fill: C.ingress.text, fontSize: 9, fontFamily: 'monospace' },
+                    labelBgStyle: { fill: '#0f172a', fillOpacity: 0.9 },
+                })
+            }
+        }
+
+        // Ingress nodes
+        for (const n of ingresses) {
+            rfNodes.push({ id: n.uid, type: 'ingress', position: { x: 0, y: 0 }, data: { node: n } })
+        }
+
+        // Ingress → Service edges
+        for (const e of graphData.edges) {
+            if (e.rel === 'routes to') {
+                const svc = nodeByUID[e.to]
+                if (!svc) continue
+                rfEdges.push({
+                    id: `${e.from}-${e.to}`,
+                    source: e.from, target: e.to,
+                    animated: true,
+                    style: edgeStyle(C.service.border),
+                    markerEnd: { type: MarkerType.ArrowClosed, color: C.service.border },
+                    label: 'routes to',
+                    labelStyle: { fill: C.service.text, fontSize: 9, fontFamily: 'monospace' },
+                    labelBgStyle: { fill: '#0f172a', fillOpacity: 0.9 },
+                })
+            }
+        }
+
+        // Service nodes (all)
+        for (const n of services) {
+            rfNodes.push({ id: n.uid, type: 'service', position: { x: 0, y: 0 }, data: { node: n } })
+        }
+
+        // Service → Pod edges
+        for (const e of graphData.edges) {
+            if (e.rel === 'selects') {
+                const pod = nodeByUID[e.to]
+                if (!pod) continue
+                if (!rfNodes.find(n => n.id === pod.uid)) {
+                    rfNodes.push({ id: pod.uid, type: 'pod', position: { x: 0, y: 0 }, data: { node: pod } })
+                }
+                rfEdges.push({
+                    id: `${e.from}-${e.to}`,
+                    source: e.from, target: e.to,
+                    animated: true,
+                    style: edgeStyle(pod.healthy ? C.pod_ok.border : C.pod_bad.border),
+                    markerEnd: { type: MarkerType.ArrowClosed, color: pod.healthy ? C.pod_ok.border : C.pod_bad.border },
+                })
+            }
+        }
+
+        // NetworkPolicy nodes + edges
+        for (const pol of policies) {
+            rfNodes.push({ id: pol.uid, type: 'policy', position: { x: 0, y: 0 }, data: { node: pol } })
+            for (const e of graphData.edges) {
+                if (e.from === pol.uid && e.rel === 'policy selects') {
+                    rfEdges.push({
+                        id: `pol-${pol.uid}-${e.to}`,
+                        source: pol.uid, target: e.to,
+                        animated: false,
+                        style: { stroke: C.policy.border, strokeWidth: 1.5, strokeDasharray: '4 3' },
+                        markerEnd: { type: MarkerType.Arrow, color: C.policy.border },
+                    })
+                }
+            }
+        }
+
+        const laid = layout(rfNodes, rfEdges)
+        return { rfNodes: laid.nodes, rfEdges: laid.edges }
+    }, [graphData])
+
+    const [nodes, , onNodesChange] = useNodesState(rfNodes)
+    const [edges, , onEdgesChange] = useEdgesState(rfEdges)
+
+    const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
+        const ni = (node.data as { node?: NodeInfo }).node
+        setSelectedNode(ni ? (selectedNode?.uid === ni.uid ? null : ni) : null)
+    }, [selectedNode])
+
+    return (
+        <div className="relative w-full h-full">
+            <ReactFlow
+                nodes={nodes}
+                edges={edges}
+                onNodesChange={onNodesChange}
+                onEdgesChange={onEdgesChange}
+                onNodeClick={onNodeClick}
+                nodeTypes={nodeTypes}
+                fitView
+                fitViewOptions={{ padding: 0.15 }}
+                minZoom={0.2}
+                maxZoom={3}
+                style={{ background: '#030712' }}
+                proOptions={{ hideAttribution: true }}
+            >
+                <Background variant={BackgroundVariant.Dots} gap={24} size={1} color="#1e293b" />
+                <Controls style={{ background: '#0f172a', border: '1px solid #1e293b' }} />
+                <MiniMap
+                    nodeColor={(n) => {
+                        if (n.type === 'internet') return C.internet.border
+                        if (n.type === 'ingress')  return C.ingress.border
+                        if (n.type === 'service')  return C.service.border
+                        if (n.type === 'policy')   return C.policy.border
+                        const ni = (n.data as { node?: NodeInfo }).node
+                        return ni?.healthy ? C.pod_ok.border : C.pod_bad.border
+                    }}
+                    style={{ background: '#0f172a', border: '1px solid #1e293b' }}
+                    maskColor="#03071288"
+                />
+            </ReactFlow>
+
+            {/* Selected node info panel */}
+            {selectedNode && (
+                <div className="absolute bottom-4 left-4 z-10 rounded-xl border border-space-700 bg-space-900/95 backdrop-blur p-3 w-64 shadow-2xl">
+                    <div className="flex items-center gap-2 mb-2">
+                        <Info className="w-3.5 h-3.5 text-accent" />
+                        <span className="text-xs font-semibold text-slate-200">{selectedNode.kind}</span>
+                        <button onClick={() => setSelectedNode(null)} className="ml-auto text-slate-600 hover:text-slate-300 text-[10px]">✕</button>
+                    </div>
+                    <div className="space-y-1 text-[10px] font-mono">
+                        <div><span className="text-slate-600">name: </span><span className="text-slate-300">{selectedNode.name}</span></div>
+                        {selectedNode.namespace && <div><span className="text-slate-600">ns: </span><span className="text-slate-300">{selectedNode.namespace}</span></div>}
+                        {selectedNode.fields && Object.entries(selectedNode.fields).map(([k, v]) =>
+                            v ? <div key={k}><span className="text-slate-600">{k}: </span><span className="text-slate-400">{v}</span></div> : null
+                        )}
+                        {selectedNode.kind === 'Pod' && (
+                            <div className={selectedNode.healthy ? 'text-emerald-400' : 'text-red-400'}>
+                                {selectedNode.healthy ? '● running' : `✖ ${selectedNode.reason ?? 'unhealthy'}`}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+        </div>
+    )
+}
+
+// ─── Page wrapper ─────────────────────────────────────────────────────────────
 export function NetworkTopology() {
     const { context, namespace } = useStore()
-    const [selected, setSelected] = useState<string | null>(null)
 
     const graphQuery = useQuery({
         queryKey: ['graph', context, namespace],
@@ -35,271 +323,64 @@ export function NetworkTopology() {
         staleTime: 30_000,
     })
 
-    const { ingresses, services, policies, edges, nodeByUID } = useMemo(() => {
-        const d = graphQuery.data
-        if (!d) return { ingresses: [], services: [], policies: [], edges: [], nodeByUID: {} }
-
-        const nodeByUID: Record<string, NodeInfo> = {}
-        for (const n of d.nodes) nodeByUID[n.uid] = n
-
-        const ingresses = d.nodes.filter(n => n.kind === 'Ingress')
-        const services  = d.nodes.filter(n => n.kind === 'Service')
-        const policies  = d.nodes.filter(n => n.kind === 'NetworkPolicy')
-
-        return { ingresses, services, policies, edges: d.edges, nodeByUID }
-    }, [graphQuery.data])
-
-    // For a given node, find all outgoing edges
-    function getEdgesFrom(uid: string): EdgeInfo[] {
-        return edges.filter(e => e.from === uid)
+    if (!context) return null
+    if (graphQuery.isLoading) {
+        return (
+            <div className="flex-1 flex flex-col items-center justify-center gap-3">
+                <Loader2 className="w-6 h-6 text-accent animate-spin" />
+                <span className="text-xs text-slate-500">Building network topology…</span>
+            </div>
+        )
+    }
+    if (graphQuery.error) {
+        return <div className="flex-1 flex items-center justify-center text-xs text-status-unhealthy">{(graphQuery.error as Error).message}</div>
     }
 
-    // Build traffic paths: Ingress → Service → Pods
-    const paths = useMemo(() => {
-        return ingresses.map(ing => {
-            const svcEdges = getEdgesFrom(ing.uid).filter(e => e.rel === 'routes to')
-            const svcNodes = svcEdges.map(e => nodeByUID[e.to]).filter(Boolean)
-            return {
-                ingress: ing,
-                services: svcNodes.map(svc => {
-                    const podEdges = getEdgesFrom(svc.uid).filter(e => e.rel === 'selects')
-                    const pods = podEdges.map(e => nodeByUID[e.to]).filter(Boolean)
-                    // Find NetworkPolicies governing these pods
-                    const govPolicies: NodeInfo[] = []
-                    for (const pod of pods) {
-                        const policyEdges = edges.filter(e => e.to === pod.uid && e.rel === 'policy selects')
-                        for (const pe of policyEdges) {
-                            const pol = nodeByUID[pe.from]
-                            if (pol && !govPolicies.find(p => p.uid === pol.uid)) {
-                                govPolicies.push(pol)
-                            }
-                        }
-                    }
-                    return { svc, pods, policies: govPolicies }
-                }),
-            }
-        })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [ingresses, services, edges, nodeByUID])
-
-    // Services not reached by any Ingress
-    const orphanServices = useMemo(() => {
-        const reachedUIDs = new Set(paths.flatMap(p => p.services.map(s => s.svc.uid)))
-        return services.filter(s => !reachedUIDs.has(s.uid))
-    }, [paths, services])
-
-    if (!context) return null
-    if (graphQuery.isLoading) return <div className="flex-1 flex items-center justify-center"><Loader2 className="w-5 h-5 text-accent animate-spin" /></div>
-    if (graphQuery.error) return <div className="flex-1 flex items-center justify-center text-xs text-status-unhealthy">{(graphQuery.error as Error).message}</div>
+    const data = graphQuery.data!
+    const ingresses = data.nodes.filter(n => n.kind === 'Ingress').length
+    const services  = data.nodes.filter(n => n.kind === 'Service').length
+    const policies  = data.nodes.filter(n => n.kind === 'NetworkPolicy').length
+    const pods      = data.nodes.filter(n => n.kind === 'Pod').length
+    const unhealthy = data.nodes.filter(n => n.kind === 'Pod' && !n.healthy).length
 
     return (
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
-            {/* Header */}
-            <div className="flex items-center gap-4">
-                <div className="w-9 h-9 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center flex-shrink-0">
-                    <Network className="w-5 h-5 text-blue-400" />
+        <div className="flex-1 flex flex-col overflow-hidden">
+            {/* Top status bar */}
+            <div className="flex items-center gap-4 px-4 py-2.5 border-b border-space-700 bg-space-900 flex-shrink-0 flex-wrap">
+                <div className="flex items-center gap-1.5">
+                    <div className="w-2 h-2 rounded-full bg-sky-400 animate-pulse" />
+                    <span className="text-[10px] font-semibold text-sky-400 uppercase tracking-widest">Network Topology</span>
                 </div>
-                <div>
-                    <h1 className="text-base font-semibold text-slate-100">Network Topology</h1>
-                    <p className="text-xs text-slate-600">
-                        Traffic paths · {ingresses.length} ingress{ingresses.length !== 1 ? 'es' : ''} · {services.length} service{services.length !== 1 ? 's' : ''} · {policies.length} network polic{policies.length !== 1 ? 'ies' : 'y'}
-                    </p>
-                </div>
-                <button onClick={() => graphQuery.refetch()} className="ml-auto p-1.5 rounded border border-space-700 text-slate-600 hover:text-accent transition-colors">
-                    <RefreshCw className={`w-3.5 h-3.5 ${graphQuery.isFetching ? 'animate-spin text-accent' : ''}`} />
-                </button>
-            </div>
-
-            {/* Legend */}
-            <div className="flex gap-4 flex-wrap">
-                {Object.entries(KIND_COLOR).map(([kind, color]) => (
-                    <div key={kind} className="flex items-center gap-1.5 text-[10px] text-slate-500">
-                        <div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: color }} />
-                        {kind}
-                    </div>
-                ))}
-                <div className="flex items-center gap-1.5 text-[10px] text-slate-500">
-                    <Shield className="w-3 h-3 text-amber-400" /> NetworkPolicy governs traffic
+                <div className="h-3 w-px bg-space-700" />
+                <StatChip label="Ingresses" value={ingresses} color="text-fuchsia-400" />
+                <StatChip label="Services"  value={services}  color="text-blue-400" />
+                <StatChip label="Pods"      value={pods}      color="text-emerald-400" />
+                {unhealthy > 0 && <StatChip label="Unhealthy" value={unhealthy} color="text-red-400" pulsing />}
+                {policies > 0  && <StatChip label="Policies"  value={policies}  color="text-amber-400" />}
+                <div className="ml-auto flex items-center gap-2">
+                    <span className="text-[9px] text-slate-600">Click a node for details · scroll to zoom</span>
+                    <button onClick={() => graphQuery.refetch()} className="p-1.5 rounded border border-space-700 text-slate-600 hover:text-accent transition-colors">
+                        <RefreshCw className={`w-3 h-3 ${graphQuery.isFetching ? 'animate-spin text-accent' : ''}`} />
+                    </button>
                 </div>
             </div>
 
-            {/* Traffic paths from Ingresses */}
-            {paths.length > 0 && (
-                <section className="space-y-4">
-                    <SectionHeader icon={<Globe className="w-3.5 h-3.5" />} label="Ingress Traffic Paths" color="text-pink-400" count={paths.length} />
-                    {paths.map(path => (
-                        <div key={path.ingress.uid} className="rounded-2xl border border-space-700 bg-space-900 overflow-hidden">
-                            {/* Ingress header */}
-                            <NodeChip node={path.ingress} selected={selected} onSelect={setSelected} />
-
-                            {path.services.length === 0 && (
-                                <div className="px-4 py-3 text-[10px] text-slate-600">↳ no Services configured</div>
-                            )}
-
-                            {path.services.map(({ svc, pods, policies: polList }) => (
-                                <div key={svc.uid} className="border-t border-space-700">
-                                    {/* Arrow + Service */}
-                                    <div className="flex items-center gap-2 px-4 py-2">
-                                        <ArrowRight className="w-3 h-3 text-slate-700 flex-shrink-0" />
-                                        <NodeChip node={svc} selected={selected} onSelect={setSelected} inline />
-                                        {svc.fields?.type && (
-                                            <span className="text-[9px] font-mono text-slate-600 ml-1">{svc.fields.type}</span>
-                                        )}
-                                        {polList.length > 0 && (
-                                            <div className="ml-auto flex gap-1">
-                                                {polList.map(pol => (
-                                                    <span key={pol.uid} title={`NetworkPolicy: ${pol.name}`}
-                                                        className="flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded border border-amber-900/40 bg-amber-950/20 text-amber-400">
-                                                        <Shield className="w-2.5 h-2.5" />{pol.name}
-                                                    </span>
-                                                ))}
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    {/* Pods */}
-                                    {pods.length > 0 && (
-                                        <div className="px-8 pb-3 flex flex-wrap gap-1.5">
-                                            {pods.map(pod => (
-                                                <PodBadge key={pod.uid} pod={pod} selected={selected} onSelect={setSelected} />
-                                            ))}
-                                            {pods.length === 0 && (
-                                                <span className="text-[10px] text-red-400">⚠ no matching pods</span>
-                                            )}
-                                        </div>
-                                    )}
-                                    {pods.length === 0 && (
-                                        <div className="px-8 pb-3 text-[10px] text-red-400">⚠ no pods selected by this service</div>
-                                    )}
-                                </div>
-                            ))}
-                        </div>
-                    ))}
-                </section>
-            )}
-
-            {/* Services not reachable from any Ingress */}
-            {orphanServices.length > 0 && (
-                <section className="space-y-3">
-                    <SectionHeader icon={<Network className="w-3.5 h-3.5" />} label="Internal Services (no Ingress)" color="text-blue-400" count={orphanServices.length} />
-                    <div className="grid gap-2">
-                        {orphanServices.map(svc => {
-                            const podEdges = getEdgesFrom(svc.uid).filter(e => e.rel === 'selects')
-                            const pods = podEdges.map(e => nodeByUID[e.to]).filter(Boolean)
-                            return (
-                                <div key={svc.uid} className="rounded-xl border border-space-700 bg-space-900 overflow-hidden">
-                                    <NodeChip node={svc} selected={selected} onSelect={setSelected} />
-                                    {pods.length > 0 && (
-                                        <div className="px-8 pb-3 flex flex-wrap gap-1.5 border-t border-space-700 pt-2">
-                                            {pods.map(pod => (
-                                                <PodBadge key={pod.uid} pod={pod} selected={selected} onSelect={setSelected} />
-                                            ))}
-                                        </div>
-                                    )}
-                                    {pods.length === 0 && (
-                                        <div className="px-4 pb-3 text-[10px] text-red-400">⚠ no pods selected</div>
-                                    )}
-                                </div>
-                            )
-                        })}
-                    </div>
-                </section>
-            )}
-
-            {/* Standalone NetworkPolicies */}
-            {policies.length > 0 && (
-                <section className="space-y-3">
-                    <SectionHeader icon={<Shield className="w-3.5 h-3.5" />} label="NetworkPolicies" color="text-amber-400" count={policies.length} />
-                    <div className="grid gap-2">
-                        {policies.map(pol => {
-                            const governed = edges.filter(e => e.from === pol.uid && e.rel === 'policy selects').map(e => nodeByUID[e.to]).filter(Boolean)
-                            return (
-                                <div key={pol.uid} className="rounded-xl border border-amber-900/30 bg-amber-950/5 p-3 space-y-2">
-                                    <div className="flex items-center gap-2">
-                                        <Shield className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
-                                        <span className="text-xs font-mono font-medium text-slate-200">{pol.name}</span>
-                                        <span className="text-[10px] text-slate-600 font-mono ml-auto">{pol.namespace}</span>
-                                    </div>
-                                    {governed.length > 0 && (
-                                        <div className="flex flex-wrap gap-1">
-                                            {governed.map(pod => (
-                                                <PodBadge key={pod.uid} pod={pod} selected={selected} onSelect={setSelected} />
-                                            ))}
-                                        </div>
-                                    )}
-                                    {governed.length === 0 && (
-                                        <div className="text-[10px] text-slate-600">No pods currently match this policy's selector</div>
-                                    )}
-                                </div>
-                            )
-                        })}
-                    </div>
-                </section>
-            )}
-
-            {ingresses.length === 0 && services.length === 0 && policies.length === 0 && (
-                <div className="flex flex-col items-center justify-center py-20 text-center">
-                    <Network className="w-10 h-10 text-slate-700 mb-3" />
-                    <div className="text-sm text-slate-500">No network resources found in scope</div>
-                </div>
-            )}
+            {/* Canvas */}
+            <div className="flex-1 overflow-hidden">
+                <ReactFlowProvider>
+                    <NetworkCanvas graphData={data} />
+                </ReactFlowProvider>
+            </div>
         </div>
     )
 }
 
-// ─── Shared sub-components ────────────────────────────────────────────────────
-
-function SectionHeader({ icon, label, color, count }: { icon: React.ReactNode; label: string; color: string; count: number }) {
+function StatChip({ label, value, color, pulsing }: { label: string; value: number; color: string; pulsing?: boolean }) {
     return (
-        <div className="flex items-center gap-2">
-            <span className={clsx('flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest', color)}>
-                {icon}{label}
-            </span>
-            <span className="text-[10px] text-slate-600">({count})</span>
-            <div className="flex-1 h-px bg-space-700" />
+        <div className="flex items-center gap-1.5 text-[10px]">
+            {pulsing && <span className={clsx('w-1.5 h-1.5 rounded-full animate-pulse', color.replace('text-', 'bg-'))} />}
+            <span className={clsx('font-bold tabular-nums', color)}>{value}</span>
+            <span className="text-slate-600">{label}</span>
         </div>
-    )
-}
-
-function NodeChip({ node, selected, onSelect, inline }: {
-    node: NodeInfo; selected: string | null; onSelect: (uid: string | null) => void; inline?: boolean
-}) {
-    const color = KIND_COLOR[node.kind] ?? '#94a3b8'
-    const icon = KIND_ICON[node.kind]
-    const isSelected = selected === node.uid
-    return (
-        <button
-            onClick={() => onSelect(isSelected ? null : node.uid)}
-            className={clsx(
-                'flex items-center gap-2 text-left transition-colors',
-                inline ? 'px-0 py-0' : 'px-4 py-3 w-full hover:bg-space-800/40',
-                isSelected && 'bg-accent/5'
-            )}
-        >
-            <div className="w-4 h-4 flex-shrink-0 flex items-center justify-center" style={{ color }}>
-                {icon || <div className="w-2 h-2 rounded-full" style={{ backgroundColor: color }} />}
-            </div>
-            <span className="text-xs font-mono font-medium" style={{ color }}>{node.kind}</span>
-            <span className="text-xs font-mono text-slate-300">{node.name}</span>
-            <span className="text-[10px] text-slate-600 font-mono">{node.namespace}</span>
-        </button>
-    )
-}
-
-function PodBadge({ pod, selected, onSelect }: { pod: NodeInfo; selected: string | null; onSelect: (uid: string | null) => void }) {
-    const isSelected = selected === pod.uid
-    return (
-        <button
-            onClick={() => onSelect(isSelected ? null : pod.uid)}
-            className={clsx(
-                'flex items-center gap-1 text-[10px] font-mono px-2 py-1 rounded-full border transition-all',
-                pod.healthy
-                    ? isSelected ? 'bg-emerald-950/50 border-emerald-700 text-emerald-300' : 'bg-space-800 border-space-700 text-slate-400 hover:border-emerald-800 hover:text-emerald-400'
-                    : isSelected ? 'bg-red-950/50 border-red-700 text-red-300' : 'bg-red-950/20 border-red-900/40 text-red-400'
-            )}
-        >
-            <span className={clsx('w-1.5 h-1.5 rounded-full flex-shrink-0', pod.healthy ? 'bg-emerald-500' : 'bg-red-500 animate-pulse')} />
-            {pod.name}
-        </button>
     )
 }
