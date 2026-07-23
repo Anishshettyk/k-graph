@@ -314,6 +314,9 @@ func (h *Handler) handleLogs(w http.ResponseWriter, r *http.Request) {
 				}
 				result.Entries = append(result.Entries, entry)
 			}
+			if err := scanner.Err(); err != nil {
+				result.Error = "read error: " + err.Error()
+			}
 			stream.Close()
 			resp.Pods = append(resp.Pods, result)
 		}

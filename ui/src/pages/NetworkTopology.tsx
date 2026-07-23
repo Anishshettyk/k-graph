@@ -147,10 +147,10 @@ function NetworkCanvas({ graphData }: {
         for (const n of graphData.nodes) nodeByUID[n.uid] = n
 
         const ingresses = graphData.nodes.filter(n => n.kind === 'Ingress')
-        const services  = graphData.nodes.filter(n => n.kind === 'Service')
-        const policies  = graphData.nodes.filter(n => n.kind === 'NetworkPolicy')
+        const services = graphData.nodes.filter(n => n.kind === 'Service')
+        const policies = graphData.nodes.filter(n => n.kind === 'NetworkPolicy')
         const svcTruncated = services.length > MAX_SERVICES
-        const totalSvcs    = services.length
+        const totalSvcs = services.length
 
         const rfNodes: Node[] = []
         const rfEdges: Edge[] = []
@@ -179,7 +179,7 @@ function NetworkCanvas({ graphData }: {
 
         // Service nodes (capped)
         const cappedServices = services.slice(0, MAX_SERVICES)
-        const cappedSvcUIDs  = new Set(cappedServices.map(s => s.uid))
+        const cappedSvcUIDs = new Set(cappedServices.map(s => s.uid))
         for (const n of cappedServices) {
             rfNodes.push({ id: n.uid, type: 'service', position: { x: 0, y: 0 }, data: { node: n } })
         }

@@ -189,6 +189,9 @@ func runLogs(cmd *cobra.Command, args []string) error {
 				}
 				fmt.Fprintf(os.Stdout, "%s %s\n", st.Render(badge), raw)
 			}
+			if err := scanner.Err(); err != nil {
+				fmt.Fprintf(os.Stderr, "scan error: %v\n", err)
+			}
 			stream.Close()
 			cancel()
 		}
