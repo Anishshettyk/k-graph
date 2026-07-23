@@ -3,21 +3,24 @@ import {
     Settings, RefreshCw, ChevronDown,
     Network, Unlink, Shield, Stethoscope,
     BarChart3, Zap, GitBranch, Globe, Folder,
+    Package, ShieldAlert,
 } from 'lucide-react'
 import { type LucideIcon } from 'lucide-react'
 import clsx from 'clsx'
 import { api } from '../api/client'
 import { useStore } from '../store/useStore'
 
-type Page = 'explorer' | 'doctor' | 'orphan' | 'rbac' | 'events' | 'metrics'
+type Page = 'explorer' | 'doctor' | 'orphan' | 'rbac' | 'events' | 'metrics' | 'images' | 'certificates'
 
 const NAV_ITEMS: { id: Page; label: string; Icon: LucideIcon }[] = [
-    { id: 'explorer', label: 'Explorer', Icon: Network },
-    { id: 'doctor',   label: 'Doctor',   Icon: Stethoscope },
-    { id: 'metrics',  label: 'Metrics',  Icon: BarChart3 },
-    { id: 'orphan',   label: 'Orphans',  Icon: Unlink },
-    { id: 'rbac',     label: 'RBAC',     Icon: Shield },
-    { id: 'events',   label: 'Events',   Icon: Zap },
+    { id: 'explorer',     label: 'Explorer', Icon: Network },
+    { id: 'doctor',       label: 'Doctor',   Icon: Stethoscope },
+    { id: 'metrics',      label: 'Metrics',  Icon: BarChart3 },
+    { id: 'images',       label: 'Images',   Icon: Package },
+    { id: 'certificates', label: 'Certs',    Icon: ShieldAlert },
+    { id: 'orphan',       label: 'Orphans',  Icon: Unlink },
+    { id: 'rbac',         label: 'RBAC',     Icon: Shield },
+    { id: 'events',       label: 'Events',   Icon: Zap },
 ]
 
 export function TopBar() {
@@ -106,8 +109,8 @@ export function TopBar() {
                         key={id}
                         onClick={() => setPage(id)}
                         className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${page === id
-                                ? 'bg-accent/15 text-accent shadow-glow-sm'
-                                : 'text-slate-400 hover:text-slate-200 hover:bg-space-800/50'
+                            ? 'bg-accent/15 text-accent shadow-glow-sm'
+                            : 'text-slate-400 hover:text-slate-200 hover:bg-space-800/50'
                             }`}
                     >
                         <Icon className="w-4 h-4" strokeWidth={page === id ? 2.5 : 2} />
@@ -117,13 +120,13 @@ export function TopBar() {
             </nav>
 
             <div className="ml-auto flex items-center gap-3">
-                <button 
+                <button
                     className="p-1.5 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-space-800 transition-colors"
                     title="Refresh Data"
                 >
                     <RefreshCw className={clsx("w-4 h-4", ctxQuery.isFetching && "animate-spin text-accent")} />
                 </button>
-                <button 
+                <button
                     className="p-1.5 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-space-800 transition-colors"
                     title="Settings"
                 >

@@ -34,7 +34,7 @@ const SEV_META: Record<EventSeverity, { label: string; icon: React.ReactNode; ro
 
 function relAge(iso: string): string {
     const secs = Math.floor((Date.now() - new Date(iso).getTime()) / 1000)
-    if (secs < 60)   return `${secs}s ago`
+    if (secs < 60) return `${secs}s ago`
     if (secs < 3600) return `${Math.floor(secs / 60)}m ago`
     return `${Math.floor(secs / 3600)}h ago`
 }
@@ -63,9 +63,9 @@ export function Events() {
 
     const bySeverity = (s: EventSeverity) => events.filter(e => e.severity === s)
     const clusterWide = bySeverity('cluster-wide')
-    const patterns    = bySeverity('critical')
-    const warnings    = bySeverity('warning')
-    const infos       = bySeverity('info')
+    const patterns = bySeverity('critical')
+    const warnings = bySeverity('warning')
+    const infos = bySeverity('info')
 
     return (
         <div className="flex-1 overflow-y-auto p-6 space-y-5">
@@ -97,9 +97,9 @@ export function Events() {
 
             {[
                 { label: 'Cluster-Wide Issues', items: clusterWide, sev: 'cluster-wide' as EventSeverity },
-                { label: 'Rapid-Repeat Patterns',items: patterns,    sev: 'critical'      as EventSeverity },
-                { label: 'Warnings',             items: warnings,    sev: 'warning'       as EventSeverity },
-                { label: 'Informational',        items: infos,       sev: 'info'          as EventSeverity },
+                { label: 'Rapid-Repeat Patterns', items: patterns, sev: 'critical' as EventSeverity },
+                { label: 'Warnings', items: warnings, sev: 'warning' as EventSeverity },
+                { label: 'Informational', items: infos, sev: 'info' as EventSeverity },
             ].map(({ label, items, sev }) => {
                 if (items.length === 0) return null
                 const meta = SEV_META[sev]

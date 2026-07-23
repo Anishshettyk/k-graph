@@ -3,6 +3,7 @@ import type {
     DoctorResponse, OrphanResponse, EventsResponse, RBACResponse,
     NetworkResponse, CanReachResponse, YAMLResponse, LogsResponse,
     MetricsSnapshotResponse, ClusterEventsResponse,
+    ImagesResponse, CertsResponse, HistoryResponse, RightsizingResponse,
 } from '../types/api'
 
 const BASE = '/api'
@@ -65,4 +66,16 @@ export const api = {
 
     clusterEvents: (context: string, namespace: string) =>
         get<ClusterEventsResponse>('/events/cluster', { context, namespace }),
+
+    images: (context: string, namespace: string) =>
+        get<ImagesResponse>('/images', { context, namespace }),
+
+    certs: (context: string, namespace: string) =>
+        get<CertsResponse>('/certs', { context, namespace }),
+
+    history: (context: string, namespace: string, resource: string) =>
+        get<HistoryResponse>('/history', { context, namespace, resource }),
+
+    rightsizing: (context: string, namespace: string) =>
+        get<RightsizingResponse>('/rightsizing', { context, namespace }),
 }

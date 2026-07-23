@@ -37,6 +37,7 @@ const (
 	CategorySecurity    = "Security"
 	CategoryStorage     = "Storage"
 	CategoryNetwork     = "Network"
+	CategoryImages      = "Images"
 )
 
 // Finding is one proactive health check result.
@@ -68,9 +69,10 @@ func Scan(g *graph.Graph, namespace string) []Finding {
 	findings = append(findings, checkSecurity(g, namespace)...)
 	findings = append(findings, checkStorage(g, namespace)...)
 	findings = append(findings, checkNetwork(g, namespace)...)
+	findings = append(findings, checkImages(g, namespace)...)
+	findings = append(findings, checkCrossNamespace(g, namespace)...)
 
 	sort.Slice(findings, func(i, j int) bool {
-		// Blocking before Warning, then by category, then by resource.
 		if findings[i].Severity != findings[j].Severity {
 			return findings[i].Severity > findings[j].Severity
 		}
@@ -442,6 +444,105 @@ func checkNetwork(g *graph.Graph, namespace string) []Finding {
 				Detail:    "other NetworkPolicies exist in this namespace; these Pods are unprotected",
 				Fix:       "add a NetworkPolicy with spec.podSelector matching this Service's selector",
 			})
+		}
+	}
+	return findings
+}
+
+// ─── Images ──────────────────────────────────────────────────────────────────
+
+func checkImages(g *graph.Graph, namespace string) []Finding {
+	var findings []Finding
+	for _, n := range g.Nodes() {
+		if n.Kind != "Pod" {
+			continue
+		}
+		if namespace != "" && n.Namespace != namespace {
+			continue
+		}
+		pod, ok := n.Raw.(*corev1.Pod)
+		if !ok || pod == nil {
+			continue
+		}
+		for _, c := range append(pod.Spec.InitContainers, pod.Spec.Containers...) {
+			tag := imageTag(c.Image)
+			if tag == "latest" || tag == "" {
+				findings = append(findings, Finding{
+					Severity:  SeverityWarning,
+					Category:  CategoryImages,
+					Kind:      "Pod",
+					Namespace: n.Namespace,
+					Name:      n.Name,
+					Issue:     fmt.Sprintf("container %q uses unpinned image tag", c.Name),
+					Detail:    fmt.Sprintf("image: %s — ':latest' or missing tag makes rollbacks non-deterministic", c.Image),
+					Fix:       "pin images to a specific digest or immutable tag (e.g. image:1.2.3)",
+				})
+			}
+		}
+	}
+	return findings
+}
+
+func imageTag(image string) string {
+	// strip digest
+	if i := indexByte(image, '@'); i >= 0 {
+		image = image[:i]
+	}
+	lastSlash := lastIndexByte(image, '/')
+	lastColon := lastIndexByte(image, ':')
+	if lastColon > lastSlash {
+		return image[lastColon+1:]
+	}
+	return "" // no tag
+}
+
+func indexByte(s string, b byte) int {
+	for i := 0; i < len(s); i++ {
+		if s[i] == b {
+			return i
+		}
+	}
+	return -1
+}
+
+func lastIndexByte(s string, b byte) int {
+	for i := len(s) - 1; i >= 0; i-- {
+		if s[i] == b {
+			return i
+		}
+	}
+	return -1
+}
+
+// ─── Cross-namespace dependencies ────────────────────────────────────────────
+
+func checkCrossNamespace(g *graph.Graph, namespace string) []Finding {
+	var findings []Finding
+	for _, n := range g.Nodes() {
+		if n.Kind != "Ingress" {
+			continue
+		}
+		if namespace != "" && n.Namespace != namespace {
+			continue
+		}
+		// Check Ingress routes-to edges: if the target Service is in a different namespace
+		for _, uid := range g.Out(n.UID) {
+			target, ok := g.Node(uid)
+			if !ok {
+				continue
+			}
+			if target.Kind == "Service" && target.Namespace != n.Namespace && target.Namespace != "" {
+				findings = append(findings, Finding{
+					Severity:  SeverityWarning,
+					Category:  CategoryNetwork,
+					Kind:      "Ingress",
+					Namespace: n.Namespace,
+					Name:      n.Name,
+					Issue:     fmt.Sprintf("routes to Service %s/%s in a different namespace", target.Namespace, target.Name),
+					Detail:    "cross-namespace Ingress → Service routing is not supported by most Ingress controllers",
+					Fix:       "deploy the Service in the same namespace as the Ingress, or use a multi-namespace gateway",
+				})
+			}
 		}
 	}
 	return findings

@@ -8,30 +8,30 @@ import { useStore } from '../store/useStore'
 const VERBS = ['get', 'list', 'watch', 'create', 'update', 'patch', 'delete', 'deletecollection']
 
 const RESOURCES: { value: string; group: string; label?: string }[] = [
-    { value: 'pods',                  group: '' },
-    { value: 'pods/log',              group: '',      label: 'pods/log' },
-    { value: 'pods/exec',             group: '',      label: 'pods/exec' },
-    { value: 'secrets',               group: '' },
-    { value: 'configmaps',            group: '' },
-    { value: 'serviceaccounts',       group: '' },
-    { value: 'services',              group: '' },
-    { value: 'endpoints',             group: '' },
-    { value: 'namespaces',            group: '' },
-    { value: 'nodes',                 group: '' },
-    { value: 'events',                group: '' },
-    { value: 'persistentvolumeclaims',group: '',      label: 'PVCs' },
-    { value: 'deployments',           group: 'apps' },
-    { value: 'replicasets',           group: 'apps' },
-    { value: 'statefulsets',          group: 'apps' },
-    { value: 'daemonsets',            group: 'apps' },
-    { value: 'jobs',                  group: 'batch' },
-    { value: 'cronjobs',              group: 'batch' },
-    { value: 'ingresses',             group: 'networking.k8s.io', label: 'ingresses' },
-    { value: 'networkpolicies',       group: 'networking.k8s.io' },
-    { value: 'roles',                 group: 'rbac.authorization.k8s.io' },
-    { value: 'clusterroles',          group: 'rbac.authorization.k8s.io' },
-    { value: 'rolebindings',          group: 'rbac.authorization.k8s.io' },
-    { value: 'clusterrolebindings',   group: 'rbac.authorization.k8s.io' },
+    { value: 'pods', group: '' },
+    { value: 'pods/log', group: '', label: 'pods/log' },
+    { value: 'pods/exec', group: '', label: 'pods/exec' },
+    { value: 'secrets', group: '' },
+    { value: 'configmaps', group: '' },
+    { value: 'serviceaccounts', group: '' },
+    { value: 'services', group: '' },
+    { value: 'endpoints', group: '' },
+    { value: 'namespaces', group: '' },
+    { value: 'nodes', group: '' },
+    { value: 'events', group: '' },
+    { value: 'persistentvolumeclaims', group: '', label: 'PVCs' },
+    { value: 'deployments', group: 'apps' },
+    { value: 'replicasets', group: 'apps' },
+    { value: 'statefulsets', group: 'apps' },
+    { value: 'daemonsets', group: 'apps' },
+    { value: 'jobs', group: 'batch' },
+    { value: 'cronjobs', group: 'batch' },
+    { value: 'ingresses', group: 'networking.k8s.io', label: 'ingresses' },
+    { value: 'networkpolicies', group: 'networking.k8s.io' },
+    { value: 'roles', group: 'rbac.authorization.k8s.io' },
+    { value: 'clusterroles', group: 'rbac.authorization.k8s.io' },
+    { value: 'rolebindings', group: 'rbac.authorization.k8s.io' },
+    { value: 'clusterrolebindings', group: 'rbac.authorization.k8s.io' },
 ]
 
 // ─── Combobox for ServiceAccount ─────────────────────────────────────────────
@@ -53,7 +53,7 @@ function SACombobox({ value, onChange, options }: {
 
     const filtered = useMemo(() =>
         options.filter(o => o.toLowerCase().includes(filter.toLowerCase())).slice(0, 20)
-    , [options, filter])
+        , [options, filter])
 
     return (
         <div ref={ref} className="relative">

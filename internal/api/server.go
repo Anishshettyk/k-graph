@@ -57,6 +57,14 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.handleLogs(w, r)
 	case "metrics":
 		h.handleMetricsSnapshot(w, r)
+	case "rightsizing":
+		h.handleRightsizing(w, r)
+	case "images":
+		h.handleImages(w, r)
+	case "certs":
+		h.handleCerts(w, r)
+	case "history":
+		h.handleHistory(w, r)
 	case "events":
 		// /api/events (resource-scoped) vs /api/events/cluster
 		if strings.HasPrefix(strings.TrimPrefix(r.URL.Path, "/api/"), "events/cluster") {

@@ -42,7 +42,7 @@ type PodMetricsInfo struct {
 	CPUMilli      int64    `json:"cpuMilli"`
 	CPULimitMilli int64    `json:"cpuLimitMilli"`
 	CPUReqMilli   int64    `json:"cpuRequestMilli"`
-	CPUPct        float64  `json:"cpuPct"`   // % of limit; -1 = no limit
+	CPUPct        float64  `json:"cpuPct"` // % of limit; -1 = no limit
 	MemBytes      int64    `json:"memBytes"`
 	MemLimitBytes int64    `json:"memLimitBytes"`
 	MemReqBytes   int64    `json:"memRequestBytes"`
@@ -55,7 +55,7 @@ type PodMetricsInfo struct {
 type Bottleneck struct {
 	Namespace      string   `json:"namespace"`
 	PodName        string   `json:"podName"`
-	Resource       string   `json:"resource"`       // "cpu" | "memory"
+	Resource       string   `json:"resource"` // "cpu" | "memory"
 	Severity       Severity `json:"severity"`
 	UsagePct       float64  `json:"usagePct"`
 	Recommendation string   `json:"recommendation"`
@@ -233,21 +233,21 @@ func memRecommendation(p PodMetricsInfo) string {
 type EventSeverity string
 
 const (
-	EvtCritical   EventSeverity = "critical"    // pattern: many occurrences quickly
-	EvtWarning    EventSeverity = "warning"      // repeated warning events
-	EvtInfo       EventSeverity = "info"         // single normal event
-	EvtCluster    EventSeverity = "cluster-wide" // same issue on multiple objects
+	EvtCritical EventSeverity = "critical"     // pattern: many occurrences quickly
+	EvtWarning  EventSeverity = "warning"      // repeated warning events
+	EvtInfo     EventSeverity = "info"         // single normal event
+	EvtCluster  EventSeverity = "cluster-wide" // same issue on multiple objects
 )
 
 type AggregatedEvent struct {
 	Reason        string        `json:"reason"`
 	Message       string        `json:"message"`
-	Objects       []string      `json:"objects"`   // "Pod/payments-abc"
+	Objects       []string      `json:"objects"` // "Pod/payments-abc"
 	Namespace     string        `json:"namespace"`
 	Count         int32         `json:"count"`
 	FirstSeen     time.Time     `json:"firstSeen"`
 	LastSeen      time.Time     `json:"lastSeen"`
-	Type          string        `json:"type"`      // Warning | Normal
+	Type          string        `json:"type"` // Warning | Normal
 	Severity      EventSeverity `json:"severity"`
 	IsPattern     bool          `json:"isPattern"`
 	IsClusterWide bool          `json:"isClusterWide"`

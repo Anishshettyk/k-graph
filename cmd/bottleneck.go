@@ -57,13 +57,13 @@ func runBottleneck(cmd *cobra.Command, _ []string) error {
 	}
 
 	// Styles
-	title    := lipgloss.NewStyle().Bold(true)
-	overSt   := lipgloss.NewStyle().Foreground(lipgloss.Color("197")).Bold(true)
-	critSt   := lipgloss.NewStyle().Foreground(lipgloss.Color("203")).Bold(true)
-	warnSt   := lipgloss.NewStyle().Foreground(lipgloss.Color("214")).Bold(true)
-	okSt     := lipgloss.NewStyle().Foreground(lipgloss.Color("42"))
-	dim      := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-	keySt    := lipgloss.NewStyle().Foreground(lipgloss.Color("117"))
+	title := lipgloss.NewStyle().Bold(true)
+	overSt := lipgloss.NewStyle().Foreground(lipgloss.Color("197")).Bold(true)
+	critSt := lipgloss.NewStyle().Foreground(lipgloss.Color("203")).Bold(true)
+	warnSt := lipgloss.NewStyle().Foreground(lipgloss.Color("214")).Bold(true)
+	okSt := lipgloss.NewStyle().Foreground(lipgloss.Color("42"))
+	dim := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+	keySt := lipgloss.NewStyle().Foreground(lipgloss.Color("117"))
 
 	ns := bottleneckNamespace
 	scope := "all namespaces"

@@ -56,7 +56,7 @@ export function Metrics() {
 
     const getHistory = useCallback((key: string, resource: 'cpuPct' | 'memPct') =>
         history.map(h => Math.max(0, h[key]?.[resource] ?? 0)),
-    [history])
+        [history])
 
     if (!context) return null
     if (query.isLoading) {

@@ -278,3 +278,133 @@ export interface ClusterEventsResponse {
     events: AggregatedEvent[]
     patterns: number
 }
+
+// ─── Images ───────────────────────────────────────────────────────────────
+
+export type ImageRisk = 'latest-tag' | 'no-tag' | 'unknown-reg'
+
+export interface ImageWorkload {
+    kind: string
+    namespace: string
+    name: string
+}
+
+export interface ImageInfo {
+    image: string
+    registry: string
+    repository: string
+    tag: string
+    risks: ImageRisk[]
+    workloads: ImageWorkload[]
+    podCount: number
+}
+
+export interface ImagesResponse {
+    context: string
+    namespace: string
+    images: ImageInfo[]
+    total: number
+    withRisks: number
+    latestTags: number
+}
+
+// ─── Certificates ─────────────────────────────────────────────────────────
+
+export type CertSeverity = 'critical' | 'warning' | 'watch' | 'ok'
+
+export interface CertInfo {
+    secretName: string
+    namespace: string
+    commonName: string
+    dnsNames: string[]
+    issuer: string
+    notBefore: string
+    notAfter: string
+    daysLeft: number
+    severity: CertSeverity
+    expired: boolean
+    parseError?: string
+}
+
+export interface CertsResponse {
+    context: string
+    namespace: string
+    certs: CertInfo[]
+    total: number
+    expired: number
+    critical: number
+    warning: number
+}
+
+// ─── Rollout History ──────────────────────────────────────────────────────
+
+export interface PodSummary {
+    name: string
+    healthy: boolean
+    phase: string
+}
+
+export interface RSRevision {
+    name: string
+    namespace: string
+    createdAt: string
+    desiredReplicas: number
+    readyReplicas: number
+    replicas: number
+    images: string[]
+    isCurrent: boolean
+    pods: PodSummary[]
+}
+
+export interface HistoryResponse {
+    context: string
+    kind: string
+    name: string
+    namespace: string
+    revisions: RSRevision[]
+}
+
+// ─── Right-Sizing ─────────────────────────────────────────────────────────
+
+export type RSizingSeverity = 'waste' | 'under-req' | 'ok'
+
+export interface ContainerSizing {
+    name: string
+    resource: 'cpu' | 'memory'
+    usageMilli?: number
+    usageBytes?: number
+    requestMilli?: number
+    requestBytes?: number
+    limitMilli?: number
+    limitBytes?: number
+    usagePct: number
+    severity: RSizingSeverity
+    recommendation: string
+}
+
+export interface PodSizing {
+    namespace: string
+    name: string
+    cpu: ContainerSizing
+    memory: ContainerSizing
+    workload?: string
+}
+
+export interface NSResourceSummary {
+    namespace: string
+    cpuRequestMilli: number
+    cpuUsedMilli: number
+    memRequestBytes: number
+    memUsedBytes: number
+    podCount: number
+}
+
+export interface RightsizingResponse {
+    context: string
+    namespace: string
+    timestamp: string
+    pods: PodSizing[]
+    available: boolean
+    wasteCount: number
+    namespaceBreakdown: NSResourceSummary[]
+}

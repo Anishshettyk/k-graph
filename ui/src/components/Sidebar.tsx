@@ -15,22 +15,22 @@ interface Props {
 
 // ─── Flat categories (non-workload, non-security) ────────────────────────────
 const FLAT_CATEGORIES = [
-    { id: 'network',        label: 'Network',        icon: Network,   kinds: ['Service', 'Ingress', 'Endpoints'] },
-    { id: 'infrastructure', label: 'Infrastructure', icon: Server,    kinds: ['Node', 'Namespace'] },
+    { id: 'network', label: 'Network', icon: Network, kinds: ['Service', 'Ingress', 'Endpoints'] },
+    { id: 'infrastructure', label: 'Infrastructure', icon: Server, kinds: ['Node', 'Namespace'] },
 ]
 
 // ─── Security sub-groups ─────────────────────────────────────────────────────
 const SECURITY_SUBGROUPS = [
-    { id: 'rbac',     label: 'RBAC',              icon: Key,      kinds: ['Role', 'ClusterRole', 'RoleBinding', 'ClusterRoleBinding'] },
-    { id: 'identity', label: 'Identities',        icon: Users,    kinds: ['ServiceAccount'] },
-    { id: 'netpol',   label: 'Network Policies',  icon: Shield,   kinds: ['NetworkPolicy'] },
+    { id: 'rbac', label: 'RBAC', icon: Key, kinds: ['Role', 'ClusterRole', 'RoleBinding', 'ClusterRoleBinding'] },
+    { id: 'identity', label: 'Identities', icon: Users, kinds: ['ServiceAccount'] },
+    { id: 'netpol', label: 'Network Policies', icon: Shield, kinds: ['NetworkPolicy'] },
 ]
 
 // ─── Config & Storage sub-groups ─────────────────────────────────────────────
 const CONFIG_SUBGROUPS = [
     { id: 'configmaps', label: 'ConfigMaps', icon: Settings2, kinds: ['ConfigMap'] },
-    { id: 'secrets',    label: 'Secrets',    icon: Lock,      kinds: ['Secret'] },
-    { id: 'storage',    label: 'Storage',    icon: Database,  kinds: ['PersistentVolumeClaim', 'PersistentVolume'] },
+    { id: 'secrets', label: 'Secrets', icon: Lock, kinds: ['Secret'] },
+    { id: 'storage', label: 'Storage', icon: Database, kinds: ['PersistentVolumeClaim', 'PersistentVolume'] },
 ]
 
 // Kinds that live in the workloads tree
@@ -236,7 +236,7 @@ export function Sidebar({ nodes, edges, selectedUID, onSelect }: Props) {
         for (const e of edges) {
             if (e.rel !== 'owns') continue
             const parent = nodeByUID[e.from]
-            const child  = nodeByUID[e.to]
+            const child = nodeByUID[e.to]
             if (!parent || !child) continue
             if (!WORKLOAD_KINDS.has(parent.kind) || !WORKLOAD_KINDS.has(child.kind)) continue
             childMap[e.from] = childMap[e.from] || []
@@ -259,7 +259,7 @@ export function Sidebar({ nodes, edges, selectedUID, onSelect }: Props) {
 
     const filteredNodes = useMemo(() =>
         nodes.filter(n => !lower || n.name.toLowerCase().includes(lower) || n.namespace?.toLowerCase().includes(lower) || n.kind.toLowerCase().includes(lower))
-    , [nodes, lower])
+        , [nodes, lower])
 
     const filteredWorkloads = lower
         ? filteredNodes.filter(n => WORKLOAD_KINDS.has(n.kind))
@@ -268,10 +268,10 @@ export function Sidebar({ nodes, edges, selectedUID, onSelect }: Props) {
     const flatGroups = useMemo(() =>
         FLAT_CATEGORIES.map(cat => ({ ...cat, items: filteredNodes.filter(n => cat.kinds.includes(n.kind)) }))
             .filter(g => g.items.length > 0)
-    , [filteredNodes])
+        , [filteredNodes])
 
     const securityNodes = filteredNodes.filter(n => SECURITY_SUBGROUPS.flatMap(s => s.kinds).includes(n.kind))
-    const configNodes   = filteredNodes.filter(n => CONFIG_SUBGROUPS.flatMap(s => s.kinds).includes(n.kind))
+    const configNodes = filteredNodes.filter(n => CONFIG_SUBGROUPS.flatMap(s => s.kinds).includes(n.kind))
 
     const totalUnhealthy = nodes.filter(n => n.kind === 'Pod' && !n.healthy).length
     const workloadUnhealthy = (lower ? filteredWorkloads : flatWorkloads).filter(n => n.kind === 'Pod' && !n.healthy).length
