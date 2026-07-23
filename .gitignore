@@ -19,3 +19,6 @@ Thumbs.db
 
 # Snapshots stored locally
 .kgraph/
+
+# air build output
+tmp/

@@ -1,0 +1,51 @@
+# .air.toml — Go live-reload config for KGraph development.
+# Run with: air
+# Watches all *.go files, rebuilds the binary, and restarts `kgraph serve`.
+#
+# Pair with `cd ui && npm run dev` in a second terminal for full hot-reload:
+#   - Go changes   → air rebuilds + restarts the API server (port 7329)
+#   - UI changes   → Vite HMR updates the browser instantly (port 5173)
+# Open http://localhost:5173 during development.
+
+[build]
+  # entrypoint = compiled binary path (replaces deprecated 'bin').
+  entrypoint  = "./tmp/kgraph"
+  cmd         = "go build -o ./tmp/kgraph ."
+  # Full command to run after a successful build (binary + args).
+  full_bin    = "./tmp/kgraph serve --open=false"
+
+  # Directories / files to watch for changes.
+  include_dir = ["cmd", "internal", "pkg"]
+  include_ext = ["go"]
+
+  # Never trigger a rebuild from these paths.
+  exclude_dir = [
+    "ui",
+    "tmp",
+    "vendor",
+    ".git",
+    "testdata",
+  ]
+  exclude_file = []
+  exclude_regex = ["_test\\.go$"]
+
+  # Extra watch paths (root go files).
+  include_file = ["main.go", "go.mod"]
+
+  # Kill the old process before starting the new one.
+  kill_delay  = "500ms"
+  send_interrupt = true
+  stop_on_error  = false
+
+[log]
+  time = false
+
+[color]
+  main    = "cyan"
+  watcher = "blue"
+  build   = "yellow"
+  runner  = "green"
+
+[misc]
+  # Clean tmp dir on exit.
+  clean_on_exit = true
