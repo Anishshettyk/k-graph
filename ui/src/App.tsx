@@ -7,6 +7,7 @@ import { Metrics } from './pages/Metrics'
 import { Events } from './pages/Events'
 import { Images } from './pages/Images'
 import { Certificates } from './pages/Certificates'
+import { NetworkTopology } from './pages/NetworkTopology'
 import { useStore } from './store/useStore'
 
 export default function App() {
@@ -24,6 +25,7 @@ export default function App() {
                 {page === 'metrics'      && <Metrics />}
                 {page === 'images'       && <Images />}
                 {page === 'certificates' && <Certificates />}
+                {page === 'network'      && <NetworkTopology />}
             </main>
         </div>
     )

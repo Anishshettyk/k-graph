@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { ChevronDown, RefreshCw, Cpu, HardDrive, Loader2 } from 'lucide-react'
+import { ChevronDown, RefreshCw, Cpu, HardDrive, Loader2, Clock, CheckCircle2, XCircle, ArrowRight } from 'lucide-react'
+import clsx from 'clsx'
 import { api } from '../api/client'
 import { kindIcon, kindColor } from '../lib/kinds'
-import type { NodeInfo, WhyResponse } from '../types/api'
+import type { NodeInfo, WhyResponse, HistoryResponse } from '../types/api'
 import { LogViewer } from './LogViewer'
 import { YAMLPanel } from './YAMLPanel'
 
@@ -11,11 +12,19 @@ interface Props {
     node: NodeInfo
     context: string
     namespace: string
-    defaultTab?: 'info' | 'yaml' | 'why' | 'events' | 'logs'
+    defaultTab?: 'info' | 'yaml' | 'why' | 'events' | 'logs' | 'history'
 }
 
+const HISTORY_KINDS = new Set(['Deployment', 'StatefulSet'])
+
 export function DetailsPanel({ node, context, namespace, defaultTab }: Props) {
-    const [tab, setTab] = useState<'info' | 'why' | 'events' | 'yaml' | 'logs'>(defaultTab ?? 'info')
+    const showHistory = HISTORY_KINDS.has(node.kind)
+    type Tab = 'info' | 'why' | 'events' | 'yaml' | 'logs' | 'history'
+    const allTabs: Tab[] = showHistory
+        ? ['info', 'yaml', 'why', 'events', 'logs', 'history']
+        : ['info', 'yaml', 'why', 'events', 'logs']
+
+    const [tab, setTab] = useState<Tab>(defaultTab ?? 'info')
 
     const whyQuery = useQuery({
         queryKey: ['why', context, namespace, `${node.kind}/${node.name}`],
@@ -45,8 +54,15 @@ export function DetailsPanel({ node, context, namespace, defaultTab }: Props) {
         staleTime: 30_000,
     })
 
+    const historyQuery = useQuery({
+        queryKey: ['history', context, namespace, `${node.kind}/${node.name}`],
+        queryFn: () => api.history(context, namespace, `${node.kind}/${node.name}`),
+        enabled: tab === 'history' && showHistory,
+        staleTime: 30_000,
+    })
+
     const color = kindColor(node.kind)
-    const tabs = ['info', 'yaml', 'why', 'events', 'logs'] as const
+    const tabs = allTabs
 
     return (
         <div className="flex flex-col h-full overflow-hidden">
@@ -113,6 +129,7 @@ export function DetailsPanel({ node, context, namespace, defaultTab }: Props) {
                     {tab === 'info' && <InfoTab node={node} />}
                     {tab === 'why' && <WhyTab query={whyQuery} />}
                     {tab === 'events' && <EventsTab query={eventsQuery} />}
+                    {tab === 'history' && <HistoryTab query={historyQuery} />}
                 </div>
             )}
         </div>
@@ -251,5 +268,93 @@ function ErrorMsg({ message }: { message: string }) {
     return <div className="text-xs text-status-unhealthy bg-red-950/20 rounded p-2">{message}</div>
 }
 
+// ─── History Tab ─────────────────────────────────────────────────────────────
+
+function HistoryTab({ query }: { query: ReturnType<typeof useQuery<HistoryResponse>> }) {
+    if (query.isLoading) return <Spinner />
+    if (query.error) return <ErrorMsg message={(query.error as Error).message} />
+    if (!query.data || !query.data.revisions?.length) {
+        return (
+            <div className="text-center py-8 text-slate-600 text-xs">
+                No rollout history found
+            </div>
+        )
+    }
+
+    const revisions = query.data.revisions
+    const total = revisions.length
+
+    return (
+        <div className="space-y-2">
+            <div className="text-[10px] font-semibold uppercase tracking-widest text-slate-500 mb-3 flex items-center gap-2">
+                <Clock className="w-3.5 h-3.5" />
+                {total} revision{total !== 1 ? 's' : ''} — newest first
+            </div>
+            {revisions.map((rev, i) => {
+                const revNum = total - i
+                const healthy = rev.readyReplicas === rev.desiredReplicas && rev.desiredReplicas > 0
+                const idle    = rev.replicas === 0
+                return (
+                    <div key={rev.name} className={clsx(
+                        'rounded-lg border p-3 space-y-2',
+                        rev.isCurrent
+                            ? 'border-accent/40 bg-accent/5'
+                            : 'border-space-700 bg-space-850'
+                    )}>
+                        {/* Rev header */}
+                        <div className="flex items-center gap-2">
+                            <span className={clsx(
+                                'text-[9px] font-bold uppercase px-1.5 py-0.5 rounded border flex-shrink-0',
+                                rev.isCurrent
+                                    ? 'text-accent border-accent/40 bg-accent/10'
+                                    : 'text-slate-600 border-space-700 bg-space-800'
+                            )}>
+                                rev {revNum}
+                            </span>
+                            {rev.isCurrent && (
+                                <span className="text-[9px] font-bold text-emerald-400">▶ CURRENT</span>
+                            )}
+                            <span className="text-[10px] text-slate-600 font-mono ml-auto flex-shrink-0">
+                                {new Date(rev.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                            </span>
+                        </div>
+
+                        {/* Replicas bar */}
+                        {!idle && (
+                            <div className="flex items-center gap-2">
+                                <div className="flex gap-0.5 flex-1">
+                                    {Array.from({ length: rev.desiredReplicas }).map((_, j) => (
+                                        <div key={j} className={clsx(
+                                            'h-2 flex-1 rounded-sm',
+                                            j < rev.readyReplicas ? 'bg-emerald-500' : 'bg-red-700/60'
+                                        )} />
+                                    ))}
+                                </div>
+                                <span className={clsx('text-[10px] font-mono flex-shrink-0', healthy ? 'text-emerald-400' : 'text-red-400')}>
+                                    {rev.readyReplicas}/{rev.desiredReplicas} ready
+                                </span>
+                            </div>
+                        )}
+                        {idle && (
+                            <div className="text-[10px] text-slate-600">0 replicas — scaled down</div>
+                        )}
+
+                        {/* Images */}
+                        {(rev.images ?? []).map(img => (
+                            <div key={img} className="flex items-center gap-1.5 text-[10px]">
+                                <ArrowRight className="w-3 h-3 text-slate-700 flex-shrink-0" />
+                                <span className="font-mono text-slate-500 truncate">{img}</span>
+                            </div>
+                        ))}
+
+                        {/* RS name */}
+                        <div className="text-[9px] font-mono text-slate-700 truncate">{rev.name}</div>
+                    </div>
+                )
+            })}
+        </div>
+    )
+}
+
 // suppress unused import warnings
-void ChevronDown; void RefreshCw; void Cpu; void HardDrive
+void ChevronDown; void RefreshCw; void Cpu; void HardDrive; void CheckCircle2; void XCircle
