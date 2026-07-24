@@ -4,6 +4,7 @@ import type {
     NetworkResponse, CanReachResponse, YAMLResponse, LogsResponse,
     MetricsSnapshotResponse, ClusterEventsResponse,
     ImagesResponse, CertsResponse, HistoryResponse, RightsizingResponse,
+    RBACRiskResponse,
 } from '../types/api'
 
 const BASE = '/api'
@@ -78,4 +79,7 @@ export const api = {
 
     rightsizing: (context: string, namespace: string) =>
         get<RightsizingResponse>('/rightsizing', { context, namespace }),
+
+    rbacAudit: (context: string, namespace: string) =>
+        get<RBACRiskResponse>('/rbac-audit', { context, namespace }),
 }

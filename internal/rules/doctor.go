@@ -71,6 +71,7 @@ func Scan(g *graph.Graph, namespace string) []Finding {
 	findings = append(findings, checkNetwork(g, namespace)...)
 	findings = append(findings, checkImages(g, namespace)...)
 	findings = append(findings, checkCrossNamespace(g, namespace)...)
+	findings = append(findings, checkLabelSelectors(g, namespace)...)
 
 	sort.Slice(findings, func(i, j int) bool {
 		if findings[i].Severity != findings[j].Severity {
@@ -546,4 +547,102 @@ func checkCrossNamespace(g *graph.Graph, namespace string) []Finding {
 		}
 	}
 	return findings
+}
+
+// ─── Label selector mismatches ────────────────────────────────────────────────
+// Finds Services whose selector matches 0 running pods (broken service),
+// and Deployments/StatefulSets where spec.selector != pod template labels.
+
+func checkLabelSelectors(g *graph.Graph, namespace string) []Finding {
+	var findings []Finding
+
+	// Build pod labels lookup
+	podLabelsByUID := map[string]map[string]string{}
+	for _, n := range g.Nodes() {
+		if n.Kind != "Pod" {
+			continue
+		}
+		if pod, ok := n.Raw.(*corev1.Pod); ok && pod != nil {
+			podLabelsByUID[string(n.UID)] = pod.Labels
+		}
+	}
+
+	for _, n := range g.Nodes() {
+		if namespace != "" && n.Namespace != namespace {
+			continue
+		}
+		switch n.Kind {
+		case "Service":
+			svc, ok := n.Raw.(*corev1.Service)
+			if !ok || svc == nil || len(svc.Spec.Selector) == 0 {
+				continue
+			}
+			// Count selects edges — if none, selector matches 0 pods
+			selectsCount := 0
+			for _, uid := range g.Out(n.UID) {
+				child, childOK := g.Node(uid)
+				if childOK && child.Kind == "Pod" {
+					selectsCount++
+				}
+			}
+			if selectsCount == 0 {
+				findings = append(findings, Finding{
+					Severity:  SeverityBlocking,
+					Category:  CategoryNetwork,
+					Kind:      "Service",
+					Namespace: n.Namespace,
+					Name:      n.Name,
+					Issue:     "selector matches 0 running pods — service has no endpoints",
+					Detail:    fmt.Sprintf("spec.selector: %v finds no matching pods in namespace %s", svc.Spec.Selector, n.Namespace),
+					Fix:       "verify pod labels match the service selector; check if the deployment is running",
+				})
+			}
+		case "Deployment":
+			d, ok := n.Raw.(*appsv1.Deployment)
+			if !ok || d == nil {
+				continue
+			}
+			if !labelsMatch(d.Spec.Selector.MatchLabels, d.Spec.Template.Labels) {
+				findings = append(findings, Finding{
+					Severity:  SeverityBlocking,
+					Category:  CategoryReliability,
+					Kind:      "Deployment",
+					Namespace: n.Namespace,
+					Name:      n.Name,
+					Issue:     "spec.selector does not match pod template labels",
+					Detail:    fmt.Sprintf("selector: %v  template: %v — pods will not be owned by this deployment", d.Spec.Selector.MatchLabels, d.Spec.Template.Labels),
+					Fix:       "align spec.selector.matchLabels with spec.template.metadata.labels",
+				})
+			}
+		case "StatefulSet":
+			s, ok := n.Raw.(*appsv1.StatefulSet)
+			if !ok || s == nil {
+				continue
+			}
+			if !labelsMatch(s.Spec.Selector.MatchLabels, s.Spec.Template.Labels) {
+				findings = append(findings, Finding{
+					Severity:  SeverityBlocking,
+					Category:  CategoryReliability,
+					Kind:      "StatefulSet",
+					Namespace: n.Namespace,
+					Name:      n.Name,
+					Issue:     "spec.selector does not match pod template labels",
+					Detail:    fmt.Sprintf("selector: %v  template: %v", s.Spec.Selector.MatchLabels, s.Spec.Template.Labels),
+					Fix:       "align spec.selector.matchLabels with spec.template.metadata.labels",
+				})
+			}
+		}
+	}
+	return findings
+}
+
+// labelsMatch returns true when all selector keys exist in the template labels
+// with matching values. A nil/empty selector always matches.
+func labelsMatch(selector, template map[string]string) bool {
+	for k, v := range selector {
+		if template[k] != v {
+			return false
+		}
+	}
+	return true
 }

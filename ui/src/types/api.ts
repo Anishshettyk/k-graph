@@ -31,10 +31,14 @@ export interface GraphResponse {
     truncated: boolean
 }
 
+// ─── Blast Radius ─────────────────────────────────────────────────────────
+export type BlastImpact = 'OUTAGE' | 'DEGRADED' | 'SAFE' | ''
+
 export interface TreeNode {
     node: NodeInfo
     rel?: string
     cycle?: boolean
+    blastImpact?: BlastImpact
     children: TreeNode[]
 }
 
@@ -409,4 +413,32 @@ export interface RightsizingResponse {
     available: boolean
     wasteCount: number
     namespaceBreakdown: NSResourceSummary[]
+}
+
+// ─── RBAC Audit ───────────────────────────────────────────────────────────
+
+export type RBACRiskLevel = 'critical' | 'warning' | 'info'
+export type RBACRiskCategory = 'cluster-admin' | 'wildcard-all' | 'wildcard-verb' | 'wildcard-res' | 'ghost-account'
+
+export interface RBACRiskFinding {
+    category: RBACRiskCategory
+    level: RBACRiskLevel
+    subject: string
+    subjectKind: string
+    subjectNs?: string
+    binding: string
+    bindingKind: string
+    bindingNs?: string
+    role: string
+    roleKind: string
+    detail: string
+    remediation: string
+}
+
+export interface RBACRiskResponse {
+    context: string
+    findings: RBACRiskFinding[]
+    critical: number
+    warning: number
+    info: number
 }

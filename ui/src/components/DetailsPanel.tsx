@@ -1,10 +1,10 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { ChevronDown, RefreshCw, Cpu, HardDrive, Loader2, Clock, CheckCircle2, XCircle, ArrowRight } from 'lucide-react'
+import { ChevronDown, RefreshCw, Cpu, HardDrive, Loader2, Clock, CheckCircle2, XCircle, ArrowRight, Zap } from 'lucide-react'
 import clsx from 'clsx'
 import { api } from '../api/client'
 import { kindIcon, kindColor } from '../lib/kinds'
-import type { NodeInfo, WhyResponse, HistoryResponse } from '../types/api'
+import type { NodeInfo, WhyResponse, HistoryResponse, TreeNode } from '../types/api'
 import { LogViewer } from './LogViewer'
 import { YAMLPanel } from './YAMLPanel'
 
@@ -12,17 +12,22 @@ interface Props {
     node: NodeInfo
     context: string
     namespace: string
-    defaultTab?: 'info' | 'yaml' | 'why' | 'events' | 'logs' | 'history'
+    defaultTab?: 'info' | 'yaml' | 'why' | 'events' | 'logs' | 'history' | 'impact'
 }
 
 const HISTORY_KINDS = new Set(['Deployment', 'StatefulSet'])
+// Impact tab shown for anything that could be a dependency
+const IMPACT_KINDS = new Set(['Secret', 'ConfigMap', 'PersistentVolumeClaim', 'Node', 'Service', 'Ingress'])
 
 export function DetailsPanel({ node, context, namespace, defaultTab }: Props) {
     const showHistory = HISTORY_KINDS.has(node.kind)
-    type Tab = 'info' | 'why' | 'events' | 'yaml' | 'logs' | 'history'
-    const allTabs: Tab[] = showHistory
-        ? ['info', 'yaml', 'why', 'events', 'logs', 'history']
-        : ['info', 'yaml', 'why', 'events', 'logs']
+    const showImpact  = IMPACT_KINDS.has(node.kind)
+    type Tab = 'info' | 'why' | 'events' | 'yaml' | 'logs' | 'history' | 'impact'
+    const allTabs: Tab[] = [
+        'info', 'yaml', 'why', 'events', 'logs',
+        ...(showHistory ? ['history' as Tab] : []),
+        ...(showImpact  ? ['impact'  as Tab] : []),
+    ]
 
     const [tab, setTab] = useState<Tab>(defaultTab ?? 'info')
 
@@ -58,6 +63,13 @@ export function DetailsPanel({ node, context, namespace, defaultTab }: Props) {
         queryKey: ['history', context, namespace, `${node.kind}/${node.name}`],
         queryFn: () => api.history(context, namespace, `${node.kind}/${node.name}`),
         enabled: tab === 'history' && showHistory,
+        staleTime: 30_000,
+    })
+
+    const impactQuery = useQuery({
+        queryKey: ['impact', context, namespace, `${node.kind}/${node.name}`],
+        queryFn: () => api.impact(context, namespace, `${node.kind.toLowerCase()}/${node.name}`),
+        enabled: tab === 'impact' && showImpact,
         staleTime: 30_000,
     })
 
@@ -130,6 +142,7 @@ export function DetailsPanel({ node, context, namespace, defaultTab }: Props) {
                     {tab === 'why' && <WhyTab query={whyQuery} />}
                     {tab === 'events' && <EventsTab query={eventsQuery} />}
                     {tab === 'history' && <HistoryTab query={historyQuery} />}
+                    {tab === 'impact' && <ImpactTab query={impactQuery} />}
                 </div>
             )}
         </div>
@@ -505,6 +518,65 @@ function DiffRow({ label, oldVal, newVal }: { label: string; oldVal: string; new
                 <div className="text-[10px] font-mono text-emerald-400 bg-emerald-950/20 rounded px-2 py-1 border border-emerald-900/30">
                     {newVal}
                 </div>
+            </div>
+        </div>
+    )
+}
+
+// ─── Impact Tab (blast radius with HA annotation) ────────────────────────────
+
+const BLAST_META = {
+    OUTAGE:   { cls: 'text-red-400 bg-red-950/40 border-red-800/50', label: 'OUTAGE' },
+    DEGRADED: { cls: 'text-amber-400 bg-amber-950/30 border-amber-800/50', label: 'DEGRADED' },
+    SAFE:     { cls: 'text-emerald-400 bg-emerald-950/30 border-emerald-800/40', label: 'SAFE' },
+}
+
+function ImpactTab({ query }: { query: ReturnType<typeof useQuery> }) {
+    const data = query.data as import('../types/api').TreeResponse | undefined
+    if (query.isLoading) return <Spinner />
+    if (query.error) return <ErrorMsg message={(query.error as Error).message} />
+    if (!data?.root) return <div className="text-xs text-slate-600 py-8 text-center">No impact data</div>
+
+    // Walk tree to find workload nodes with blast impact
+    const impacted: Array<{ node: import('../types/api').NodeInfo; impact: string; path: string[] }> = []
+    function walk(t: TreeNode, path: string[]) {
+        if (t.blastImpact) {
+            impacted.push({ node: t.node, impact: t.blastImpact, path })
+        }
+        for (const c of t.children ?? []) walk(c, [...path, t.node.kind + '/' + t.node.name])
+    }
+    walk(data.root, [])
+
+    return (
+        <div className="space-y-3">
+            <div className="text-[10px] text-slate-500 flex items-center gap-2">
+                <Zap className="w-3.5 h-3.5 text-accent" />
+                Blast radius — workloads impacted if this resource changes
+            </div>
+            {impacted.length === 0 && (
+                <div className="text-center py-8 text-slate-600 text-xs">No workloads directly impacted</div>
+            )}
+            {impacted.map(({ node, impact }, i) => {
+                const meta = BLAST_META[impact as keyof typeof BLAST_META]
+                const color = kindColor(node.kind)
+                const NodeIcon = kindIcon(node.kind)
+                return (
+                    <div key={i} className="rounded-lg border border-space-700 bg-space-850 p-3 flex items-center gap-3">
+                        {NodeIcon && <NodeIcon className="w-4 h-4 flex-shrink-0" style={{ color }} />}
+                        <div className="flex-1 min-w-0">
+                            <div className="text-xs font-mono text-slate-200 truncate">{node.name}</div>
+                            <div className="text-[9px] text-slate-600 font-mono">{node.namespace}</div>
+                        </div>
+                        {meta && (
+                            <span className={clsx('text-[9px] font-bold uppercase px-1.5 py-0.5 rounded border flex-shrink-0', meta.cls)}>
+                                {meta.label}
+                            </span>
+                        )}
+                    </div>
+                )
+            })}
+            <div className="text-[9px] text-slate-700 pt-1">
+                OUTAGE = single replica · DEGRADED = 2–4 replicas · SAFE = 5+ replicas
             </div>
         </div>
     )

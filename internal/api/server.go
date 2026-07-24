@@ -48,6 +48,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.handleOrphan(w, r)
 	case "rbac":
 		h.handleRBAC(w, r)
+	case "rbac-audit":
+		h.handleRBACRisk(w, r)
 	case "network":
 		h.handleNetwork(w, r)
 	case "can-reach":

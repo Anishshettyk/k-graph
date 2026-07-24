@@ -232,11 +232,25 @@ func collectImages(cs []corev1.Container) string {
 
 // ─── /api/deps and /api/impact ───────────────────────────────────────────────
 
+// BlastImpact classifies the survivability of a workload when a dependency
+// is removed or modified. Only populated for impact-tree responses.
+//   OUTAGE   — single replica; removing the dependency causes a complete outage
+//   DEGRADED — 2–4 replicas; some pods lost but service may limp along
+//   SAFE     — 5+ replicas or not a workload node; little or no impact
+type BlastImpact = string
+
+const (
+	BlastOutage   BlastImpact = "OUTAGE"
+	BlastDegraded BlastImpact = "DEGRADED"
+	BlastSafe     BlastImpact = "SAFE"
+)
+
 type TreeNode struct {
-	Node     NodeInfo    `json:"node"`
-	Rel      string      `json:"rel,omitempty"`
-	Cycle    bool        `json:"cycle,omitempty"`
-	Children []*TreeNode `json:"children"`
+	Node        NodeInfo    `json:"node"`
+	Rel         string      `json:"rel,omitempty"`
+	Cycle       bool        `json:"cycle,omitempty"`
+	BlastImpact BlastImpact `json:"blastImpact,omitempty"` // impact trees only
+	Children    []*TreeNode `json:"children"`
 }
 
 type TreeResponse struct {
@@ -276,10 +290,10 @@ func (h *Handler) handleTree(w http.ResponseWriter, r *http.Request, impact bool
 	} else {
 		qtree = query.DependencyTree(g, *node)
 	}
-	writeJSON(w, TreeResponse{Context: ctxName, Root: convertTree(qtree)})
+	writeJSON(w, TreeResponse{Context: ctxName, Root: convertTree(qtree, impact)})
 }
 
-func convertTree(qt *query.TreeNode) *TreeNode {
+func convertTree(qt *query.TreeNode, annotateBlast bool) *TreeNode {
 	if qt == nil {
 		return nil
 	}
@@ -288,10 +302,56 @@ func convertTree(qt *query.TreeNode) *TreeNode {
 		Rel:   string(qt.Rel),
 		Cycle: qt.Cycle,
 	}
+	if annotateBlast {
+		t.BlastImpact = computeBlastImpact(qt.Node)
+	}
 	for _, c := range qt.Children {
-		t.Children = append(t.Children, convertTree(c))
+		t.Children = append(t.Children, convertTree(c, annotateBlast))
 	}
 	return t
+}
+
+// computeBlastImpact returns the blast-radius severity for a workload node
+// based on its desired replica count.
+func computeBlastImpact(n graph.Node) BlastImpact {
+	switch obj := n.Raw.(type) {
+	case *appsv1.Deployment:
+		if obj == nil {
+			return ""
+		}
+		r := int32(1)
+		if obj.Spec.Replicas != nil {
+			r = *obj.Spec.Replicas
+		}
+		return replicasToBlast(r)
+	case *appsv1.StatefulSet:
+		if obj == nil {
+			return ""
+		}
+		r := int32(1)
+		if obj.Spec.Replicas != nil {
+			r = *obj.Spec.Replicas
+		}
+		return replicasToBlast(r)
+	case *appsv1.DaemonSet:
+		if obj == nil {
+			return ""
+		}
+		return replicasToBlast(obj.Status.DesiredNumberScheduled)
+	default:
+		return ""
+	}
+}
+
+func replicasToBlast(replicas int32) BlastImpact {
+	switch {
+	case replicas <= 1:
+		return BlastOutage
+	case replicas < 5:
+		return BlastDegraded
+	default:
+		return BlastSafe
+	}
 }
 
 // ─── /api/why ────────────────────────────────────────────────────────────────
@@ -334,7 +394,7 @@ func (h *Handler) handleWhy(w http.ResponseWriter, r *http.Request) {
 	resp := WhyResponse{
 		Context: ctxName,
 		Node:    nodeToInfo(*node),
-		Tree:    convertTree(qtree),
+		Tree:    convertTree(qtree, false),
 	}
 
 	// Direct diagnosis for Service / PVC.
