@@ -7,9 +7,10 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 
+	"strings"
+
 	"github.com/anishetty/kgraph/internal/collector"
 	rbacv1 "k8s.io/api/rbac/v1"
-	"strings"
 )
 
 var rbacAuditCmd = &cobra.Command{

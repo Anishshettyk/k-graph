@@ -234,9 +234,10 @@ func collectImages(cs []corev1.Container) string {
 
 // BlastImpact classifies the survivability of a workload when a dependency
 // is removed or modified. Only populated for impact-tree responses.
-//   OUTAGE   — single replica; removing the dependency causes a complete outage
-//   DEGRADED — 2–4 replicas; some pods lost but service may limp along
-//   SAFE     — 5+ replicas or not a workload node; little or no impact
+//
+//	OUTAGE   — single replica; removing the dependency causes a complete outage
+//	DEGRADED — 2–4 replicas; some pods lost but service may limp along
+//	SAFE     — 5+ replicas or not a workload node; little or no impact
 type BlastImpact = string
 
 const (

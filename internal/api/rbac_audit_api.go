@@ -29,11 +29,11 @@ const (
 type RBACRiskCategory string
 
 const (
-	RBACClusterAdmin  RBACRiskCategory = "cluster-admin"   // bound to non-system account
-	RBACWildcardAll   RBACRiskCategory = "wildcard-all"    // * verbs on * resources
-	RBACWildcardVerb  RBACRiskCategory = "wildcard-verb"   // * verbs on named resources
-	RBACWildcardRes   RBACRiskCategory = "wildcard-res"    // write on * resources
-	RBACGhostAccount  RBACRiskCategory = "ghost-account"   // SA with bindings but no pods
+	RBACClusterAdmin RBACRiskCategory = "cluster-admin" // bound to non-system account
+	RBACWildcardAll  RBACRiskCategory = "wildcard-all"  // * verbs on * resources
+	RBACWildcardVerb RBACRiskCategory = "wildcard-verb" // * verbs on named resources
+	RBACWildcardRes  RBACRiskCategory = "wildcard-res"  // write on * resources
+	RBACGhostAccount RBACRiskCategory = "ghost-account" // SA with bindings but no pods
 )
 
 type RBACRiskFinding struct {
@@ -207,31 +207,31 @@ func auditRules(rules []rbacv1.PolicyRule, subjName, subjKind, subjNS, bindingNa
 
 		if hasWildcardVerb && hasWildcardRes {
 			out = append(out, RBACRiskFinding{
-				Category:    RBACWildcardAll,
-				Level:       RBACCritical,
-				Subject:     subjName, SubjectKind: subjKind, SubjectNS: subjNS,
-				Binding:     bindingName, BindingKind: bindingKind, BindingNS: subjNS,
-				Role:        roleName, RoleKind: roleKind,
+				Category: RBACWildcardAll,
+				Level:    RBACCritical,
+				Subject:  subjName, SubjectKind: subjKind, SubjectNS: subjNS,
+				Binding: bindingName, BindingKind: bindingKind, BindingNS: subjNS,
+				Role: roleName, RoleKind: roleKind,
 				Detail:      fmt.Sprintf("Rule grants %q all verbs on all resources — effectively cluster-admin within scope", subjName),
 				Remediation: "Restrict to specific resources and verbs actually needed",
 			})
 		} else if hasWildcardVerb {
 			out = append(out, RBACRiskFinding{
-				Category:    RBACWildcardVerb,
-				Level:       RBACWarning,
-				Subject:     subjName, SubjectKind: subjKind, SubjectNS: subjNS,
-				Binding:     bindingName, BindingKind: bindingKind,
-				Role:        roleName, RoleKind: roleKind,
+				Category: RBACWildcardVerb,
+				Level:    RBACWarning,
+				Subject:  subjName, SubjectKind: subjKind, SubjectNS: subjNS,
+				Binding: bindingName, BindingKind: bindingKind,
+				Role: roleName, RoleKind: roleKind,
 				Detail:      fmt.Sprintf("Rule grants all verbs on [%s] — includes future verbs", strings.Join(rule.Resources, ", ")),
 				Remediation: "Enumerate only the verbs this workload actually needs (get, list, watch)",
 			})
 		} else if hasWildcardRes && hasWrites {
 			out = append(out, RBACRiskFinding{
-				Category:    RBACWildcardRes,
-				Level:       RBACWarning,
-				Subject:     subjName, SubjectKind: subjKind, SubjectNS: subjNS,
-				Binding:     bindingName, BindingKind: bindingKind,
-				Role:        roleName, RoleKind: roleKind,
+				Category: RBACWildcardRes,
+				Level:    RBACWarning,
+				Subject:  subjName, SubjectKind: subjKind, SubjectNS: subjNS,
+				Binding: bindingName, BindingKind: bindingKind,
+				Role: roleName, RoleKind: roleKind,
 				Detail:      fmt.Sprintf("Rule grants write access to all resources — %q can create/modify any object", subjName),
 				Remediation: "Enumerate specific resources this workload needs to write",
 			})

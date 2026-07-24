@@ -21,12 +21,12 @@ const IMPACT_KINDS = new Set(['Secret', 'ConfigMap', 'PersistentVolumeClaim', 'N
 
 export function DetailsPanel({ node, context, namespace, defaultTab }: Props) {
     const showHistory = HISTORY_KINDS.has(node.kind)
-    const showImpact  = IMPACT_KINDS.has(node.kind)
+    const showImpact = IMPACT_KINDS.has(node.kind)
     type Tab = 'info' | 'why' | 'events' | 'yaml' | 'logs' | 'history' | 'impact'
     const allTabs: Tab[] = [
         'info', 'yaml', 'why', 'events', 'logs',
         ...(showHistory ? ['history' as Tab] : []),
-        ...(showImpact  ? ['impact'  as Tab] : []),
+        ...(showImpact ? ['impact' as Tab] : []),
     ]
 
     const [tab, setTab] = useState<Tab>(defaultTab ?? 'info')
@@ -526,9 +526,9 @@ function DiffRow({ label, oldVal, newVal }: { label: string; oldVal: string; new
 // ─── Impact Tab (blast radius with HA annotation) ────────────────────────────
 
 const BLAST_META = {
-    OUTAGE:   { cls: 'text-red-400 bg-red-950/40 border-red-800/50', label: 'OUTAGE' },
+    OUTAGE: { cls: 'text-red-400 bg-red-950/40 border-red-800/50', label: 'OUTAGE' },
     DEGRADED: { cls: 'text-amber-400 bg-amber-950/30 border-amber-800/50', label: 'DEGRADED' },
-    SAFE:     { cls: 'text-emerald-400 bg-emerald-950/30 border-emerald-800/40', label: 'SAFE' },
+    SAFE: { cls: 'text-emerald-400 bg-emerald-950/30 border-emerald-800/40', label: 'SAFE' },
 }
 
 function ImpactTab({ query }: { query: ReturnType<typeof useQuery> }) {

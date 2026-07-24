@@ -120,7 +120,7 @@ export function RBAC() {
             </div>
 
             {activeTab === 'tracer' && <RBACTracer />}
-            {activeTab === 'audit'  && <RBACRiskAudit />}
+            {activeTab === 'audit' && <RBACRiskAudit />}
         </div>
     )
 }
@@ -387,16 +387,16 @@ function RBACTracer() {
 // ─── RBAC Overprivilege Audit ─────────────────────────────────────────────
 
 const LEVEL_META: Record<RBACRiskLevel, { label: string; cls: string; badge: string }> = {
-    critical: { label: 'CRITICAL', cls: 'border-red-800/40 bg-red-950/10',   badge: 'text-red-400 bg-red-950/50 border-red-800/50' },
-    warning:  { label: 'WARNING',  cls: 'border-amber-800/40 bg-amber-950/10', badge: 'text-amber-400 bg-amber-950/50 border-amber-800/50' },
-    info:     { label: 'INFO',     cls: 'border-space-700 bg-space-900',        badge: 'text-slate-500 bg-space-800 border-space-700' },
+    critical: { label: 'CRITICAL', cls: 'border-red-800/40 bg-red-950/10', badge: 'text-red-400 bg-red-950/50 border-red-800/50' },
+    warning: { label: 'WARNING', cls: 'border-amber-800/40 bg-amber-950/10', badge: 'text-amber-400 bg-amber-950/50 border-amber-800/50' },
+    info: { label: 'INFO', cls: 'border-space-700 bg-space-900', badge: 'text-slate-500 bg-space-800 border-space-700' },
 }
 
 const CATEGORY_LABEL: Record<string, string> = {
     'cluster-admin': 'Cluster Admin',
-    'wildcard-all':  '* verbs on * resources',
+    'wildcard-all': '* verbs on * resources',
     'wildcard-verb': '* verbs',
-    'wildcard-res':  '* resources (write)',
+    'wildcard-res': '* resources (write)',
     'ghost-account': 'Ghost Account',
 }
 
@@ -430,8 +430,8 @@ function RBACRiskAudit() {
                 </div>
                 <div className="ml-auto flex items-center gap-2 text-[10px]">
                     {data.critical > 0 && <span className="px-2 py-1 rounded border border-red-900/40 bg-red-950/20 text-red-400 font-bold">{data.critical} critical</span>}
-                    {data.warning  > 0 && <span className="px-2 py-1 rounded border border-amber-900/40 bg-amber-950/20 text-amber-400">{data.warning} warning</span>}
-                    {data.info     > 0 && <span className="px-2 py-1 rounded border border-space-700 bg-space-800 text-slate-500">{data.info} info</span>}
+                    {data.warning > 0 && <span className="px-2 py-1 rounded border border-amber-900/40 bg-amber-950/20 text-amber-400">{data.warning} warning</span>}
+                    {data.info > 0 && <span className="px-2 py-1 rounded border border-space-700 bg-space-800 text-slate-500">{data.info} info</span>}
                 </div>
             </div>
 
