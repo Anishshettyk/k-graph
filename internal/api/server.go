@@ -9,13 +9,18 @@ import (
 // Handler is the single HTTP handler for the KGraph JSON API.
 // Every endpoint calls the same internal packages as the CLI commands.
 type Handler struct {
-	kubeconfig string
-	cache      *resourceCache
+	kubeconfig     string
+	cache          *resourceCache
+	metricsHistory *metricsHistory
 }
 
 // New returns an API handler backed by the given kubeconfig path.
 func New(kubeconfig string) *Handler {
-	return &Handler{kubeconfig: kubeconfig, cache: newResourceCache()}
+	return &Handler{
+		kubeconfig:     kubeconfig,
+		cache:          newResourceCache(),
+		metricsHistory: newMetricsHistory(),
+	}
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {

@@ -372,20 +372,29 @@ export interface HistoryResponse {
 
 // ─── Right-Sizing ─────────────────────────────────────────────────────────
 
-export type RSizingSeverity = 'waste' | 'under-req' | 'ok'
+export type RSizingSeverity = 'waste' | 'under-req' | 'spiky' | 'ok'
+export type RSizingConfidence = 'low' | 'medium' | 'high'
+
+export interface RangeStats {
+    min: number
+    max: number
+    avg: number
+    p95: number
+    current: number
+    samples: number
+    windowMinutes: number
+}
 
 export interface ContainerSizing {
-    name: string
     resource: 'cpu' | 'memory'
-    usageMilli?: number
-    usageBytes?: number
-    requestMilli?: number
-    requestBytes?: number
-    limitMilli?: number
-    limitBytes?: number
-    usagePct: number
+    request: number        // millicores or bytes
+    limit: number
+    stats: RangeStats
+    p95Pct: number         // p95 as % of request
+    maxPct: number
     severity: RSizingSeverity
     recommendation: string
+    confidence: RSizingConfidence
 }
 
 export interface PodSizing {
@@ -413,6 +422,8 @@ export interface RightsizingResponse {
     available: boolean
     wasteCount: number
     namespaceBreakdown: NSResourceSummary[]
+    typicalSamples: number
+    windowMinutes: number
 }
 
 // ─── RBAC Audit ───────────────────────────────────────────────────────────

@@ -5,7 +5,7 @@ import clsx from 'clsx'
 import { api } from '../api/client'
 import { useStore } from '../store/useStore'
 import { Sparkline, UsageBar } from '../components/Sparkline'
-import type { PodMetricsInfo, Bottleneck, PodSizing, NSResourceSummary } from '../types/api'
+import type { PodMetricsInfo, Bottleneck } from '../types/api'
 
 // Rolling history of snapshots accumulated client-side.
 // Each entry is a map: "namespace/name" → [cpuPct, memPct]
@@ -255,6 +255,129 @@ export function Metrics() {
 
 // ─── Rightsizing Tab ─────────────────────────────────────────────────────────
 
+const CONF_META = {
+    low:    { cls: 'text-slate-600 border-slate-800 bg-space-800',   label: 'LOW confidence — collecting data' },
+    medium: { cls: 'text-amber-500 border-amber-900/40 bg-amber-950/20', label: 'MEDIUM confidence — short window' },
+    high:   { cls: 'text-emerald-400 border-emerald-900/40 bg-emerald-950/20', label: 'HIGH confidence' },
+}
+
+const SEV_META: Record<string, { label: string; cls: string }> = {
+    waste:     { label: 'WASTE',  cls: 'text-amber-400 border-amber-900/40 bg-amber-950/30' },
+    'under-req':  { label: 'UNDER',  cls: 'text-red-400 border-red-900/40 bg-red-950/30' },
+    spiky:     { label: 'SPIKY',  cls: 'text-violet-400 border-violet-900/40 bg-violet-950/30' },
+}
+
+function fmtCPU(m: number) { return m >= 1000 ? `${(m/1000).toFixed(2)}` : `${m}m` }
+function fmtMem(b: number) {
+    if (b >= 1<<30) return `${(b/(1<<30)).toFixed(1)}Gi`
+    if (b >= 1<<20) return `${Math.round(b/(1<<20))}Mi`
+    return `${Math.round(b/1024)}Ki`
+}
+
+// Range bar: shows min / avg / p95 / max relative to the request
+function RangeBar({ stats, request, resource }: {
+    stats: import('../types/api').RangeStats
+    request: number
+    resource: 'cpu' | 'memory'
+}) {
+    if (!request || stats.samples === 0) return null
+    const pct = (v: number) => Math.min(120, (v / request) * 100)
+    const fmt = resource === 'cpu' ? fmtCPU : fmtMem
+
+    return (
+        <div className="space-y-1.5">
+            {/* Track */}
+            <div className="relative h-3 bg-space-800 rounded-full overflow-visible">
+                {/* Request line (100%) */}
+                <div className="absolute top-0 bottom-0 w-px bg-slate-600 z-10" style={{ left: '83.3%' }}
+                    title="Request" />
+                {/* Min → Max range bar */}
+                <div className="absolute top-0.5 bottom-0.5 rounded-full bg-blue-900/40"
+                    style={{ left: `${pct(stats.min)}%`, right: `${100 - pct(stats.max)}%` }} />
+                {/* Avg dot */}
+                <div className="absolute top-0.5 bottom-0.5 w-1 rounded-full bg-blue-400 z-10"
+                    style={{ left: `${pct(stats.avg) - 0.25}%` }} title={`avg: ${fmt(stats.avg)}`} />
+                {/* P95 dot */}
+                <div className="absolute top-0 bottom-0 w-1.5 rounded-full bg-amber-400 z-20"
+                    style={{ left: `${pct(stats.p95) - 0.375}%` }} title={`p95: ${fmt(stats.p95)}`} />
+            </div>
+            {/* Legend */}
+            <div className="flex items-center gap-3 text-[9px]">
+                <span className="text-slate-600">min <span className="text-slate-400 font-mono">{fmt(stats.min)}</span></span>
+                <span className="text-slate-600">avg <span className="text-blue-400 font-mono">{fmt(stats.avg)}</span></span>
+                <span className="text-slate-600">p95 <span className="text-amber-400 font-mono">{fmt(stats.p95)}</span></span>
+                <span className="text-slate-600">max <span className="text-slate-400 font-mono">{fmt(stats.max)}</span></span>
+                <span className="ml-auto text-slate-700">req <span className="font-mono">{fmt(request)}</span></span>
+            </div>
+        </div>
+    )
+}
+
+function SizingRow({ p }: { p: import('../types/api').PodSizing }) {
+    const cpuSev = p.cpu.severity !== 'ok'
+    const memSev = p.memory.severity !== 'ok'
+    const conf = p.cpu.confidence ?? 'low'
+    const confMeta = CONF_META[conf]
+
+    const borderCls =
+        p.cpu.severity === 'waste' || p.memory.severity === 'waste' ? 'border-amber-900/30 bg-amber-950/5' :
+        p.cpu.severity === 'under-req' || p.memory.severity === 'under-req' ? 'border-red-900/30 bg-red-950/5' :
+        p.cpu.severity === 'spiky' || p.memory.severity === 'spiky' ? 'border-violet-900/30 bg-violet-950/5' :
+        'border-space-700 bg-space-900'
+
+    return (
+        <div className={clsx('rounded-xl border p-3 space-y-3', borderCls)}>
+            {/* Pod header */}
+            <div className="flex items-start gap-2">
+                <div className="flex-1 min-w-0">
+                    <div className="text-xs font-mono text-slate-300 truncate">{p.namespace}/{p.name}</div>
+                    {p.workload && <div className="text-[9px] text-slate-600 font-mono mt-0.5">{p.workload}</div>}
+                </div>
+                {/* Confidence badge */}
+                <span className={clsx('text-[8px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded border flex-shrink-0', confMeta.cls)}>
+                    {conf === 'low' ? `${p.cpu.stats.samples ?? 0} samples` : `${conf} · ${p.cpu.stats.samples ?? 0}s`}
+                </span>
+            </div>
+
+            {/* CPU section */}
+            {p.cpu.stats.samples > 0 && (
+                <div className="space-y-1.5">
+                    <div className="flex items-center gap-2">
+                        <span className="text-[9px] font-bold uppercase tracking-widest text-slate-500">CPU</span>
+                        {cpuSev && SEV_META[p.cpu.severity] && (
+                            <span className={clsx('text-[8px] font-bold uppercase px-1.5 py-0.5 rounded border', SEV_META[p.cpu.severity].cls)}>
+                                {SEV_META[p.cpu.severity].label}
+                            </span>
+                        )}
+                    </div>
+                    <RangeBar stats={p.cpu.stats} request={p.cpu.request} resource="cpu" />
+                    {(cpuSev || conf !== 'low') && (
+                        <p className="text-[10px] text-slate-400 leading-snug">{p.cpu.recommendation}</p>
+                    )}
+                </div>
+            )}
+
+            {/* Memory section */}
+            {p.memory.stats.samples > 0 && (
+                <div className="space-y-1.5">
+                    <div className="flex items-center gap-2">
+                        <span className="text-[9px] font-bold uppercase tracking-widest text-slate-500">MEMORY</span>
+                        {memSev && SEV_META[p.memory.severity] && (
+                            <span className={clsx('text-[8px] font-bold uppercase px-1.5 py-0.5 rounded border', SEV_META[p.memory.severity].cls)}>
+                                {SEV_META[p.memory.severity].label}
+                            </span>
+                        )}
+                    </div>
+                    <RangeBar stats={p.memory.stats} request={p.memory.request} resource="memory" />
+                    {(memSev || conf !== 'low') && (
+                        <p className="text-[10px] text-slate-400 leading-snug">{p.memory.recommendation}</p>
+                    )}
+                </div>
+            )}
+        </div>
+    )
+}
+
 function RightsizingTab({ rsQuery }: { rsQuery: ReturnType<typeof useQuery> }) {
     const data = rsQuery.data as import('../types/api').RightsizingResponse | undefined
     if (rsQuery.isLoading) return <div className="flex justify-center py-12"><Loader2 className="w-5 h-5 text-accent animate-spin" /></div>
@@ -262,52 +385,13 @@ function RightsizingTab({ rsQuery }: { rsQuery: ReturnType<typeof useQuery> }) {
     if (!data) return null
 
     const pods = data.pods ?? []
-    const wasted = pods.filter(p => p.cpu.severity === 'waste' || p.memory.severity === 'waste')
-    const under = pods.filter(p => p.cpu.severity === 'under-req' || p.memory.severity === 'under-req')
-    const ok = pods.filter(p => p.cpu.severity === 'ok' && p.memory.severity === 'ok')
+    const wasted  = pods.filter(p => p.cpu.severity === 'waste'     || p.memory.severity === 'waste')
+    const under   = pods.filter(p => p.cpu.severity === 'under-req' || p.memory.severity === 'under-req')
+    const spiky   = pods.filter(p => p.cpu.severity === 'spiky'     || p.memory.severity === 'spiky')
+    const ok      = pods.filter(p => !['waste','under-req','spiky'].includes(p.cpu.severity) && !['waste','under-req','spiky'].includes(p.memory.severity))
 
-    function SizingRow({ p }: { p: PodSizing }) {
-        const cpuBad = p.cpu.severity !== 'ok'
-        const memBad = p.memory.severity !== 'ok'
-        return (
-            <div className={clsx(
-                'rounded-xl border p-3 space-y-2',
-                p.cpu.severity === 'waste' || p.memory.severity === 'waste'
-                    ? 'border-amber-900/30 bg-amber-950/5'
-                    : p.cpu.severity === 'under-req' || p.memory.severity === 'under-req'
-                        ? 'border-red-900/30 bg-red-950/5'
-                        : 'border-space-700 bg-space-900'
-            )}>
-                <div className="flex items-center gap-2">
-                    <span className="text-xs font-mono text-slate-300 truncate flex-1">{p.namespace}/{p.name}</span>
-                    {p.workload && <span className="text-[10px] text-slate-600 font-mono flex-shrink-0">{p.workload}</span>}
-                </div>
-                {cpuBad && p.cpu.recommendation && (
-                    <div className="flex items-start gap-2">
-                        <span className={clsx(
-                            'text-[9px] font-bold uppercase px-1.5 py-0.5 rounded border flex-shrink-0',
-                            p.cpu.severity === 'waste' ? 'text-amber-400 border-amber-900/40 bg-amber-950/30' : 'text-red-400 border-red-900/40 bg-red-950/30'
-                        )}>CPU {p.cpu.severity === 'waste' ? 'WASTE' : 'LOW'}</span>
-                        <span className="text-[10px] text-slate-400">{p.cpu.recommendation}</span>
-                    </div>
-                )}
-                {memBad && p.memory.recommendation && (
-                    <div className="flex items-start gap-2">
-                        <span className={clsx(
-                            'text-[9px] font-bold uppercase px-1.5 py-0.5 rounded border flex-shrink-0',
-                            p.memory.severity === 'waste' ? 'text-amber-400 border-amber-900/40 bg-amber-950/30' : 'text-red-400 border-red-900/40 bg-red-950/30'
-                        )}>MEM {p.memory.severity === 'waste' ? 'WASTE' : 'LOW'}</span>
-                        <span className="text-[10px] text-slate-400">{p.memory.recommendation}</span>
-                    </div>
-                )}
-                {!cpuBad && !memBad && (
-                    <div className="text-[10px] text-slate-600 flex items-center gap-1.5">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-status-healthy" /> Well-sized
-                    </div>
-                )}
-            </div>
-        )
-    }
+    const typical = data.typicalSamples ?? 0
+    const window  = data.windowMinutes  ?? 0
 
     return (
         <div className="space-y-5">
@@ -316,41 +400,67 @@ function RightsizingTab({ rsQuery }: { rsQuery: ReturnType<typeof useQuery> }) {
                     metrics-server not available — rightsizing requires live usage data
                 </div>
             )}
-            <div className="flex gap-4 text-xs">
-                <div className="rounded-xl border border-amber-900/30 bg-amber-950/10 p-3 flex-1 text-center">
-                    <div className="text-2xl font-bold text-amber-400">{wasted.length}</div>
-                    <div className="text-slate-500 mt-0.5">over-provisioned</div>
-                </div>
-                <div className="rounded-xl border border-red-900/30 bg-red-950/10 p-3 flex-1 text-center">
-                    <div className="text-2xl font-bold text-red-400">{under.length}</div>
-                    <div className="text-slate-500 mt-0.5">under-provisioned</div>
-                </div>
-                <div className="rounded-xl border border-emerald-900/30 bg-emerald-950/10 p-3 flex-1 text-center">
-                    <div className="text-2xl font-bold text-emerald-400">{ok.length}</div>
-                    <div className="text-slate-500 mt-0.5">well-sized</div>
+
+            {/* Data quality notice */}
+            <div className={clsx(
+                'rounded-xl border p-3 text-[10px] flex items-start gap-2',
+                typical < 3  ? 'border-slate-800 bg-space-900 text-slate-500' :
+                typical < 10 ? 'border-amber-900/30 bg-amber-950/5 text-amber-500' :
+                               'border-emerald-900/30 bg-emerald-950/5 text-emerald-400'
+            )}>
+                <span className="flex-shrink-0 font-bold">
+                    {typical < 3 ? '⏳' : typical < 10 ? '◑' : '✓'}
+                </span>
+                <div>
+                    {typical < 3
+                        ? `Collecting data — ${typical} sample${typical !== 1 ? 's' : ''} gathered so far. Leave this tab open for ~15 minutes for reliable recommendations.`
+                        : typical < 10
+                            ? `${typical} samples over ~${window.toFixed(0)}m — recommendations are tentative. Continue monitoring for higher confidence.`
+                            : `${typical} samples over ~${window.toFixed(0)}m — recommendations are based on a solid usage pattern.`
+                    }
+                    <span className="text-slate-600 ml-1">Range bar: <span className="text-blue-400">avg</span> · <span className="text-amber-400">p95</span> · min/max</span>
                 </div>
             </div>
+
+            {/* Summary counts */}
+            <div className="grid grid-cols-4 gap-3 text-xs">
+                {[
+                    { n: wasted.length,  color: 'text-amber-400',   bg: 'border-amber-900/30 bg-amber-950/10',  label: 'Over-prov.' },
+                    { n: under.length,   color: 'text-red-400',     bg: 'border-red-900/30 bg-red-950/10',      label: 'Under-prov.' },
+                    { n: spiky.length,   color: 'text-violet-400',  bg: 'border-violet-900/30 bg-violet-950/10', label: 'Spiky' },
+                    { n: ok.length,      color: 'text-emerald-400', bg: 'border-emerald-900/30 bg-emerald-950/10', label: 'Well-sized' },
+                ].map(({ n, color, bg, label }) => (
+                    <div key={label} className={clsx('rounded-xl border p-3 text-center', bg)}>
+                        <div className={clsx('text-xl font-bold', color)}>{n}</div>
+                        <div className="text-slate-600 mt-0.5 text-[10px]">{label}</div>
+                    </div>
+                ))}
+            </div>
+
             {wasted.length > 0 && (
-                <div className="space-y-2">
-                    <div className="text-[10px] font-semibold uppercase tracking-widest text-amber-500">Over-Provisioned ({wasted.length})</div>
-                    {wasted.map(p => <SizingRow key={`${p.namespace}/${p.name}`} p={p} />)}
-                </div>
+                <Section label="Over-Provisioned" color="text-amber-500" pods={wasted} />
             )}
             {under.length > 0 && (
-                <div className="space-y-2">
-                    <div className="text-[10px] font-semibold uppercase tracking-widest text-red-400">Under-Provisioned ({under.length})</div>
-                    {under.map(p => <SizingRow key={`${p.namespace}/${p.name}`} p={p} />)}
-                </div>
+                <Section label="Under-Provisioned" color="text-red-400" pods={under} />
+            )}
+            {spiky.length > 0 && (
+                <Section label="Spiky (high variance)" color="text-violet-400" pods={spiky} />
             )}
             {ok.length > 0 && (
-                <div className="space-y-2">
-                    <div className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">Well-Sized ({ok.length})</div>
-                    {ok.map(p => <SizingRow key={`${p.namespace}/${p.name}`} p={p} />)}
-                </div>
+                <Section label="Well-Sized" color="text-slate-500" pods={ok} />
             )}
             {pods.length === 0 && (
                 <div className="text-center py-12 text-slate-600 text-sm">No pods with resource requests found</div>
             )}
+        </div>
+    )
+}
+
+function Section({ label, color, pods }: { label: string; color: string; pods: import('../types/api').PodSizing[] }) {
+    return (
+        <div className="space-y-2">
+            <div className={clsx('text-[10px] font-semibold uppercase tracking-widest', color)}>{label} ({pods.length})</div>
+            {pods.map(p => <SizingRow key={`${p.namespace}/${p.name}`} p={p} />)}
         </div>
     )
 }
@@ -372,7 +482,7 @@ function NamespacesTab({ rsQuery }: { rsQuery: ReturnType<typeof useQuery> }) {
     return (
         <div className="space-y-3">
             <p className="text-xs text-slate-600">CPU and memory requests by namespace — shows cluster resource allocation distribution</p>
-            {nsList.map((ns: NSResourceSummary) => {
+            {nsList.map((ns: import('../types/api').NSResourceSummary) => {
                 const cpuPct = (ns.cpuRequestMilli / maxCPU) * 100
                 const memPct = (ns.memRequestBytes / maxMem) * 100
                 const cpuUsePct = ns.cpuRequestMilli > 0 ? (ns.cpuUsedMilli / ns.cpuRequestMilli) * 100 : 0
